@@ -2149,7 +2149,7 @@ def query_program(account, password, output_text):
         max_retries = 10
         for attempt in range(max_retries):
             try:
-                response = requests.get(url, headers=headers, params=params)
+                response = requests.get(url, headers=headFers, params=params)
 
                 if response.status_code == 200:
                     response_data = response.json()
@@ -2157,7 +2157,10 @@ def query_program(account, password, output_text):
                         time.sleep(5)
                         continue
                     extract_and_update_excel(response_data, output_path, awbcode)
-                    update_output_text(output_text, f"{response_data}\n\n")
+                    with open(r"C:\Users\Cainiao\Desktop\NEW TEXT DOCUMENT.txt", "a", encoding="utf-8") as file:
+                        file.write(f"{response_data}\n\n")
+
+
                     return response_data
                 else:
                     time.sleep(5)
@@ -7743,7 +7746,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("冷知识，生鱼片是死鱼片。")
+root.title("冷知识1，生鱼片是死鱼片。")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
