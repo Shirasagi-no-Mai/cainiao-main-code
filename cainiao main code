@@ -2157,7 +2157,7 @@ def query_program(account, password, output_text):
                         time.sleep(5)
                         continue
                     extract_and_update_excel(response_data, output_path, awbcode)
-                    with open(r"C:\Users\Cainiao\Desktop\NEW TEXT DOCUMENT.txt", "a", encoding="utf-8") as file:
+                    with open(r"C:\Users\Cainiao\Desktop\New Text Document.txt", "a", encoding="utf-8") as file:
                         file.write(f"{response_data}\n\n")
 
 
