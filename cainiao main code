@@ -67,14 +67,10 @@ def fetch_expiration_date():
 expiration_date1 = fetch_expiration_date()
 print(f"expiration_date1: {expiration_date1}")
 
-
-
-
-
-
 # ② 功能权限配置
 # ----------------------------
 PERMISSION_URL = "https://raw.githubusercontent.com/Shirasagi-no-Mai/my-exe-control2/refs/heads/main/onlinecode"
+
 
 def fetch_permissions():
     """从远程读取功能权限列表"""
@@ -107,13 +103,6 @@ def is_user_allowed(func_name, username):
 permissions = fetch_permissions()
 print("权限列表示例：")
 print(json.dumps(permissions, indent=2, ensure_ascii=False))
-
-
-
-
-
-
-
 
 # *************************通过个人网页更新过期日期*************************************************************************
 
@@ -2062,7 +2051,7 @@ def query_program(account, password, output_text):
                 sheet.append(
                     ['Master BOL Number', 'Carrier Code', 'Vessel', 'Voyage/Flight No', 'Arrival Date', 'FIRMS',
                      '1D Count', '1H Count', '1A Count', '2H Count', '1I Count', '2I Count', '1C Count', '1B Count',
-                     'House', 'port', 'qty',"1R Count","1X Count"])
+                     'House', 'port', 'qty', "1R Count", "1X Count"])
 
             # 提取字段，每个字段都 try-except 防止报错
             def safe_extract(label, func):
@@ -2090,7 +2079,7 @@ def query_program(account, password, output_text):
             qty = safe_extract("qty", lambda: first_record.get('houses', [{}])[0].get('manifestQty', 'N/A'))
 
             # 统计 dispositionCode
-            disposition_codes = ['1D', '1H', '1A', '2H', '1I', '2I', '1B',"1R","1X"]
+            disposition_codes = ['1D', '1H', '1A', '2H', '1I', '2I', '1B', "1R", "1X"]
             all_disp_codes = []
 
             for house in first_record.get('houses', []):
@@ -2117,13 +2106,12 @@ def query_program(account, password, output_text):
             count_1r = code_counts.get('1R', 0)
             count_1x = code_counts.get('1X', 0)
 
-
             qty = count_1h + count_2h + count_1a - count_1i - count_2i - count_1B
             # 写入 Excel
             sheet.append([
                 master_bol_number, carrier_code, vessel, voyage_flight_no, arrival_date, firms,
                 count_1d, count_1h, count_1a, count_2h, count_1i, count_2i, count_1c,
-                count_1B, hawb_number, actual_port_of_unlading, qty,count_1r,count_1x
+                count_1B, hawb_number, actual_port_of_unlading, qty, count_1r, count_1x
             ])
 
             red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
@@ -2142,6 +2130,51 @@ def query_program(account, password, output_text):
             awb = first_record.get('awbNumber', '未知AWB') if 'first_record' in locals() else awbcode
             print(f"❌ 提取信息 [{awb}] 时总错误: {e}")
 
+    def extract_entry_numbers(response,awbcode):
+        entries = set()
+
+        try:
+            # 如果 response.text 是字符串格式
+            if hasattr(response, "json"):  # 是 requests.Response 对象
+                data = response.json()
+            elif isinstance(response, str):  # 是 JSON 字符串
+                data = json.loads(response)
+            elif isinstance(response, dict):  # 已经是字典
+                data = response
+            else:
+                raise TypeError(f"Unsupported response type: {type(response)}")
+
+            for resp in data.get("data", {}).get("response", []):
+                # 顶层 entryNumber
+                if resp.get("entryNumber"):
+                    entries.add(resp["entryNumber"])
+
+                # statusMsg 层
+                for disp in resp.get("statusMsg", []):
+                    if disp.get("entryNumber"):
+                        entries.add(disp["entryNumber"])
+
+                # houses -> dispositionMsg 层
+                for house in resp.get("houses", []):
+                    for disp in house.get("dispositionMsg", []):
+                        if disp.get("entryNumber"):
+                            entries.add(disp["entryNumber"])
+
+            # 写入桌面文件
+            update_output_text(output_text, f"\n\n{awbcode}:Entry Numbers:\n")
+            for e in entries:
+                update_output_text(output_text, e + "\n")
+            update_output_text(output_text, "\n")
+
+            return list(entries)
+
+        except Exception as e:
+            update_output_text(output_text, "\n\n❌ Error while extracting entry numbers:")
+            print("❌ Error while extracting entry numbers:", e)
+
+            return []
+
+
     def checkstatus(token, awbcode, output_path):
         url = "https://api.customscity.com/api/ManifestQueryLatestResponse"
         params = {"type": "AWBNUMBER", "masterBOLNumber": awbcode}
@@ -2149,15 +2182,18 @@ def query_program(account, password, output_text):
         max_retries = 10
         for attempt in range(max_retries):
             try:
-                response = requests.get(url, headers=headFers, params=params)
+                response = requests.get(url, headers=headers, params=params)
 
                 if response.status_code == 200:
                     response_data = response.json()
+                    # with open(r"C:\Users\jliu0\Desktop\New 文本文档.txt", "a", encoding="utf-8") as f:
+                    #     f.write(f"Response: {response_data} \n")
+
                     if "message" in response_data and response_data["message"] == "No response yet":
                         time.sleep(5)
                         continue
                     extract_and_update_excel(response_data, output_path, awbcode)
-
+                    extract_entry_numbers(response_data,awbcode)
                     return response_data
                 else:
                     time.sleep(5)
@@ -2165,6 +2201,8 @@ def query_program(account, password, output_text):
                 time.sleep(5)
         print(f"Max retries reached for AWB {awbcode}. Unable to get a valid response.")
         return None
+
+
 
     # 示例调用：请确保 `mawb_list` 和 `output_path` 已定义
     clear_excel_file(output_path)
@@ -2323,6 +2361,7 @@ import msoffcrypto
 import pandas as pd
 from datetime import datetime
 
+
 def line_extract(account, password, output_text):
     expiration_date = expiration_date1
     now = datetime.now()
@@ -2353,7 +2392,8 @@ def line_extract(account, password, output_text):
         sys.exit()
 
     # Step 3 — 找文件
-    excel_files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.xls', '.xlsx')) and not f.startswith('~$')]
+    excel_files = [f for f in os.listdir(folder_path) if
+                   f.lower().endswith(('.xls', '.xlsx')) and not f.startswith('~$')]
     packing_list_file = None
     invoice_file = None
     for file in excel_files:
@@ -2399,41 +2439,25 @@ def line_extract(account, password, output_text):
     # 读取 df (BBCreview.xlsx 第一列)
     df_file = os.path.join(desktop_path, "BBCreview.xlsx")
     df = pd.read_excel(df_file, header=None, dtype=str)
-    
+
     first_column_list = df.iloc[:, 0].dropna().tolist()
-    
+
     # 用于记录补了0的值
     padded_values = []
-    
+
     # 处理每个值，不足12位前面补0
     for i in range(len(first_column_list)):
         original = first_column_list[i]
         if len(original) < 12:
             first_column_list[i] = original.zfill(12)
             padded_values.append(first_column_list[i])
-    
+
     # 输出处理后的列表
     update_output_text(output_text, first_column_list)
-    
+
     # 如果有补0的，输出提示
     if padded_values:
         update_output_text(output_text, f"这些补了0: {padded_values}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     result_dict = {}
     for val in first_column_list:
@@ -2500,6 +2524,7 @@ def line_extract(account, password, output_text):
             update_output_text(output_text, f"🗑 删除临时解密文件: {file}\n")
 
     update_output_text(output_text, "✅ 完成所有步骤\n")
+
 
 def Nikki_template(account, password, output_text):
     expiration_date = expiration_date1
@@ -2685,6 +2710,7 @@ def Nikki_template(account, password, output_text):
 
     update_output_text(output_text, f"✅ 拆分完成，共生成 {num_files} 个 Excel 文件。\n\n")
 
+
 def wechat(account, password, output_text):
     from seleniumwire import webdriver
     chrome_options = webdriver.ChromeOptions()
@@ -2707,7 +2733,8 @@ def wechat(account, password, output_text):
     driver.maximize_window()  # 最大化窗口
 
     all_tabs = driver.window_handles
-    all_tabs = driver.window_handles 
+    all_tabs = driver.window_handles
+
 
 def reverse_line_extract(account, password, output_text):
     expiration_date = expiration_date1
@@ -2739,7 +2766,8 @@ def reverse_line_extract(account, password, output_text):
         sys.exit()
 
     # Step 3 — 找文件
-    excel_files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.xls', '.xlsx')) and not f.startswith('~$')]
+    excel_files = [f for f in os.listdir(folder_path) if
+                   f.lower().endswith(('.xls', '.xlsx')) and not f.startswith('~$')]
     packing_list_file = None
     invoice_file = None
     for file in excel_files:
@@ -2806,8 +2834,8 @@ def reverse_line_extract(account, password, output_text):
         # 找 invoice 中对应行 (BJ=entry_val, BL=line_val)
         matches = df_invoice[
             (df_invoice.iloc[:, 61].astype(str).str.strip() == entry_val) &  # BJ列
-            (df_invoice.iloc[:, 63].astype(str).str.strip() == line_val)     # BL列
-        ]
+            (df_invoice.iloc[:, 63].astype(str).str.strip() == line_val)  # BL列
+            ]
 
         if matches.empty:
             update_output_text(output_text, f"⚠️ 没有找到对应 entry:{entry_val} line:{line_val} 的 Invoice 数据\n")
@@ -2827,7 +2855,8 @@ def reverse_line_extract(account, password, output_text):
 
         # 写入第五列
         ws.cell(row=row_idx, column=5, value=aa_match if aa_match else "N/A")
-        update_output_text(output_text, f"匹配 entry:{entry_val}, line:{line_val} -> {aa_match if aa_match else 'N/A'}\n")
+        update_output_text(output_text,
+                           f"匹配 entry:{entry_val}, line:{line_val} -> {aa_match if aa_match else 'N/A'}\n")
 
     wb.save(df_file)
 
@@ -2838,7 +2867,6 @@ def reverse_line_extract(account, password, output_text):
             update_output_text(output_text, f"🗑 删除临时解密文件: {file}\n")
 
     update_output_text(output_text, "✅ 完成反向提取步骤\n")
-
 
 
 def document_program(account, password, output_text):
@@ -3276,7 +3304,6 @@ def document_program(account, password, output_text):
         time.sleep(1)
         update_output_text(output_text, f"{entry_number}结束")
     update_output_text(output_text, "全部完成")
-
 
 
 def release_program(account, password, output_text):
@@ -3877,6 +3904,7 @@ def release_program(account, password, output_text):
         time.sleep(1)
         update_output_text(output_text, f"{entry_number}结束")
     update_output_text(output_text, "全部完成")
+
 
 def bolupdate_program(account, password, output_text):
     expiration_date = expiration_date1
@@ -5270,7 +5298,6 @@ def BBC_review_program(account, password, output_text):
     except (TimeoutException, NoSuchElementException) as e:
         print(f"Error occurred during login: {e}")
 
-
     def get_cookies_from_selenium(driver):
         cookies = driver.get_cookies()
         # 把 selenium 的 cookie 转成 requests 能用的格式
@@ -5440,7 +5467,6 @@ def BBC_review_program(account, password, output_text):
     wb.save(file_path)
     wb.close()
     update_output_text(output_text, "代码完成\n\n")
-
 
 
 def transmit_program(account, password, output_text):
@@ -7147,7 +7173,7 @@ def Steel_Aluminum_dutyprogram(account, password, output_text):
                     "点击某个按钮")
             wait_for_block_to_disappear(driver, timeout=80, check_interval=1)
             time.sleep(1)
-        return all_data, txt_file_path,filtered_listc
+        return all_data, txt_file_path, filtered_listc
 
     def decode_and_save(encoded_data: str, save_path: str):
         """
@@ -7393,7 +7419,7 @@ def Steel_Aluminum_dutyprogram(account, password, output_text):
             "reference_number": reference_number,
         }
 
-    all_data, txt_file_path,filtered_listc = get_code(account, password)
+    all_data, txt_file_path, filtered_listc = get_code(account, password)
     print(all_data)
     for (entry_number, data), fixtime in zip(all_data.items(), filtered_listc):
         encoded_data = extract_encoded_data(entry_number, data)
@@ -7426,6 +7452,7 @@ def Steel_Aluminum_dutyprogram(account, password, output_text):
 
         print(f"{entry_number} 处理完成\n")
     update_output_text(output_text, f"------------全部处理完成-----------------------------------")
+
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -7482,10 +7509,11 @@ def start_program(account, password, output_text, task_type, mode=None):
     elif task_type == "Nikki template":
         Nikki_template(account, password, output_text)
     elif task_type == "白宫总统办公室联系方式":
-        wechat(account, password, output_text)   
+        wechat(account, password, output_text)
+
+    # 登录界面
 
 
-# 登录界面
 def login_window():
     global windowname
     windowname = 'login'
