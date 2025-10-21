@@ -2212,98 +2212,75 @@ def query_program(account, password, output_text):
 
 
 def QP_program(account, password, output_text):
-    """
-    使用account和password登录，调用API获取manifest数据，并将输出写入output_text。
-    
-    参数:
-        account (str): 用户账号
-        password (str): 用户密码
-        output_text: 用于输出的对象（如Tkinter Text控件或回调函数）
-    """
-    # Step 1: 创建Session以保持Cookie
-    session = requests.Session()
-    
-    # Step 2: 设置基础Headers
+    url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/queryPage"
+    # 请求头
     headers = {
-        'Accept': 'application/json, text/plain, */*',
-        'Bx-V': '2.5.31',
-        'Content-Type': 'application/json',
-        'Referer': 'https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestlist',
-        'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        "Content-Type": "application/json",
+        "X-Xsrf-Token": "24e699d5-0005-4d86-95d5-32733707261b",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Origin": "https://os.gcsp.cainiao-inc.com",
+        "Referer": "https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestlist",
+        "Bx-V": "2.5.31",
+        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin"
     }
     
-    # Step 3: 模拟登录（假设登录URL和逻辑）
-    login_url = 'https://os.gcsp.cainiao-inc.com/login'  # 需替换为真实登录URL
-    login_data = {
-        'username': account,
-        'password': password
+    # Cookie（包含 XSRF-TOKEN 和其他可能需要的 Cookie）
+    cookies = {
+        "XSRF-TOKEN": "24e699d5-0005-4d86-95d5-32733707261b",
+        "SSO_LANG_V2": "ZH-CN",
+        "SSO_EMPID_HASH_V2": "11fe152432408bdc913802cec5ea566c",
+        "SSO_BU_HASH_V2": "1e387a787818f77b803a555735045ffa",
+        "cna": "UoB9IaRUahQCASp4SS00yjSc",
+        "xlly_s": "1",
+        "operateTimeZone": "America/Los_Angeles",
+        "cn-groot_USER_COOKIE_V3": "ST180.unL3_2EJzInMJzVUHDycTfq_ozjzN4e-9q459epsDJVJgNR5YiHbPJzQOJFbmTbq360shNPt-t3rJjB-I8cEfD2_B85P7a-LxPYWXybuoLIlIZyAlm-LkDBObWqZwxUNV0YLipBqL-tk9kJyKWQJWSL007hdE-DnHZ-GMj-y9gMsX4nxf_r2NQaEYkapr-N7AQXdI-b9Z-NRA_zxPNE3u6453EJYHGGhLwzPZf0-_YIEa0hv9yehfc4nEXgOrFD5Na255jAukFde0JLqzjlp-yzkUQxsMSprgpwnbPiuwWT3pvGQnFtP-4YRdK9IAvrjx0XNQ2uLKYE0i78s8yJCtO8Zccqru0XkedfM_CsjMQLfBwsNujaj0Mf5e_9GW5KF4i6dekJR0imre1wJMB4nuorgjmhveL3d-jGu6myjcN0TkOIcYJ0t94YBgwDL0iPLxIYpZ-aumTlVgSH6K-tXQJ4DYBD33IlbGTowegB4YNNx4cbghuvywtGwveZ6jNs7FK8cLeI2OAiKB6phCoiKDYnOXkX8Yn3shFvibD6_XXsBRVKTi5YqqI96GUkqMrh0IjMoK7A8z7Lk-SaXDmWOgwDHqDBEVrqDyMWZYxOUHPg.kJlEDPq9tfSlWPk7_rGeUOW7kM9GxamGiYZlpb4XUzlisCWzzSMzL0rjGIZ1HJg75XTOyo_euWyIEDai7Fihb6KlcLT2Esluw-_kq7YVHEols2j1AME1n9D3Qo0LibsCULUJrvIR84GH08J5B9YneydwKtAdwW3Wd7f3ki58-8j8eTA49HGze_hPp4iMJP1SXkue1LvSFwlOrM8TIzOnq29RrPVMxAY5NXhDifu_WAfUack1hrO_-niH_yQVsoUdSM2wsFhmeR4AZaBiogLWj0bKpRuLkMaVtVceIV2CCO5PMUjNTONFx4x10nAwCQJbjh4NnTlYLWWboYmpUV8HEg",
+        "cn-gateway-useagent": "pc",
+        "x-hng": "lang=zh-CN&domain=os.gcsp.cainiao-inc.com",
+        "cn_account_lang": "zh_CN",
+        "OsInnerPcSessionModel": "6D03BA1F1670D5C10B9F4B0C3AD272F0707F0B8B4962758D2E7FA05D61159E2E14472B75C7BB2101B695B76D7E8CCA3F13D42735B404B57C32036A6A17903D3F58855E50196DCB79AA41CB7463C372FA12DDD7D3E3C24D30EF4C92E056994B2D28ED4E815CD18D09F577E6D4775A4552B1A9CED60366BB25423E0EBDE0F543C8",
+        "cacbi": "Y24wMTEwMDAwMTE4MjY3MDQ=",
+        "cbc_cacbi": "Y24wMTEwMDAwMTE4MjY3MDQ=",
+        "userLoginType": "cbc",
+        "lang": "zh-CN",
+        "gcep.mcms.language": "zh-CN",
+        "cn-groot_SSO_TOKEN_V3": "ST180.eyJ0aW1lIjoxNzYxMDcxMDU3NjM5LCJ0b2tlbiI6ImJ1YzdiMDE3YThjODJlMzQzZGY4MzA2OGY3YmQzYjAwNDBiNjMzMDAifQ.VtStyv8nAkD1RrKA2_lvqN1xQCVoufokZh2pGuO0IJyHbNHVyDo7s_Yguz2BPg2woMVhQjCv_DhIzcvp3pDxlB5hDaoMrxdBRExZsYvulLvbxbXYTYrhQ7PP2qgLQuwhrAWbT2DC4wM60dwCKS1qDZ9SKWb4C7Nj067RymqHI4uEBNDFPD1a69ZmtdcVe3FJ0OrCbd7S7kRqlJirhC19MK6KOodomqic3liPfHVLqsWiHDc2ItQ0WY7THML-_pQ0E9E6nKBmgRJWR_zI5QzK0GvJcsIhA5LDnNCp_ViowhtxFXc77igd9LD_hc7OQs39rMdRcLksgj6Up91KkvwRtg",
+        "tfstk": "gtnr8S1KX3KrYF5XVjEFQbzX31E8-kR6rDNQKvD3F7VuV7gVTXDLOyAJyHuENXP7r4MQTqlnMzNue7ExgjGURY9peW2nMbS5AuD7Y2lS14s7OXtUtAEuJ4NQNWrEpfJX1htseYELmCO6faSMasqOq_VlOSV0ekylCadQXYELxIgoJm2-ebBOXcUuxKr0LRCuxyjlnKyapkju-gbciSe3xk4urrD0C82ltJ4H3xVYKkVntzv4mSe3xWc3xbGmEvj4CzvjHZcwOCIDm5kugMjnqeU0_HyuHSo4EzVgP7s3hmyzz5DobRBmT-mj0PafdQEmBqGu3l-P68umQu2EvdbUTyo80SlwjMexrbo08m9pyxoUaPmuuOjIHkyntyuv_GwzVqzZ44pdiYc_aVq-dORS3Pu4W-4cLaqS5AiLS0xP6SaTLjzszCSrsg5O9-AAyD3PtwzuH-P63K76dGMtsjxEZwQLole41Lw5-wfT5-P6eL_dJr2U3595j",
+        "isg": "BPPztTIan23lKFM4B5UM7BhkgvcdKIfqRN0VVqWatpJJpAFGKPliOwNyXsRKBN_i"
     }
     
-    try:
-        # 发送登录请求
-        login_resp = session.post(login_url, json=login_data, headers=headers)
-        if login_resp.status_code != 200:
-            update_output_text(output_text, f"登录失败，状态码: {login_resp.status_code}")
-            session.close()
-            return
-        
-        # 提取X-Xsrf-Token（假设从响应headers或body获取）
-        xsrf_token = login_resp.headers.get('X-Xsrf-Token', 'ba3c9310-3249-4d25-9fb6-7498aee92a70')  # 替换为实际逻辑
-        headers['X-Xsrf-Token'] = xsrf_token
-        update_output_text(output_text, "登录成功，获取到XSRF Token")
-        
-    except Exception as e:
-        update_output_text(output_text, f"登录异常: {str(e)}")
-        session.close()
-        return
-    
-    # Step 4: 设置API请求体
+    # Payload
     payload = {
         "testMode": "false",
         "domain": "USA",
         "gateCode": "All",
-        "tabStatus": "All",
-        "pageNo": 1,
-        "pageSize": 10,
-        "createTimeBegin": "06-10-2025 00:00:00",
-        "createTimeEnd": "21-10-2025 00:00:00",
+        "linehualCode": "180-52215796",
+        "createTimeBegin": "07-10-2025 00:00:00",
+        "createTimeEnd": "22-10-2025 00:00:00",
+        "createTimeStr": ["2025-10-07T07:00:00.000Z", "2025-10-22T07:00:00.000Z"],
         "etaTimeBegin": "",
-        "etaTimeEnd": "",
-        "linehualCode": "936-01654144"
+        "etaTimeEnd": ""
     }
     
-    # Step 5: 发送API请求
-    api_url = 'https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/queryPage'
-    try:
-        response = session.post(api_url, headers=headers, json=payload)
-        
-        # Step 6: 检查响应并提取内容
-        if response.status_code == 200:
-            data = response.json()
-            update_output_text(output_text, "API响应内容：")
-            update_output_text(output_text, json.dumps(data, indent=2, ensure_ascii=False))
-            
-            # 提取records（假设响应结构）
-            if 'data' in data and 'records' in data['data']:
-                records = data['data']['records']
-                update_output_text(output_text, f"\n提取到 {len(records)} 条记录：")
-                for record in records:
-                    update_output_text(output_text, f"- ID: {record.get('id', 'N/A')}, CreateTime: {record.get('createTime', 'N/A')}")
-            else:
-                update_output_text(output_text, "响应中无有效数据记录")
-        else:
-            update_output_text(output_text, f"请求失败，状态码: {response.status_code}")
-            update_output_text(output_text, f"错误信息: {response.text}")
+    # 发送 POST 请求
+    response = requests.post(url, headers=headers, cookies=cookies, json=payload)
     
-    except Exception as e:
-        update_output_text(output_text, f"API请求异常: {str(e)}")
-    
-    # Step 7: 关闭Session
-    session.close()
+    # 检查响应
+    if response.status_code == 200:
 
+        update_output_text(output_text, "请求成功！响应数据：")
+        update_output_text(output_text, response.json())
+    else:
+
+        update_output_text(output_text, f"请求失败，状态码：{response.status_code}")
+        update_output_text(output_text, response.text)
 
 import os
 import msoffcrypto
