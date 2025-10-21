@@ -7720,7 +7720,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("冷知识1，生鱼片是死鱼片。")
+root.title("冷知识2，生鱼片是死鱼片。")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
