@@ -243,8 +243,6 @@ def node_token(account, password, output_text):
 
 
 
-
-
 def email_token(account, password, output_text):
     user_home = os.path.expanduser("~")
     possible_paths = [
@@ -425,11 +423,7 @@ def email_token(account, password, output_text):
 
 
 
-
-
-
-
-def email_program(account, password, output_text):
+def email_program(account, password, output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
     possible_paths = [
         os.path.join(user_home, "Desktop"),
@@ -532,7 +526,7 @@ def email_program(account, password, output_text):
 
         # Step 4: 正确的 payload（邮箱专用）
         payload = {
-            "query": '{"folderIds":["101"]}',  # 101 = 收件箱
+            "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
             "showFrom": "1",
             "offset": "0",
             "length": "50",  # 每页数量
@@ -821,7 +815,7 @@ def email_program(account, password, output_text):
     raw_query = get_mail_list()
     email_id_list = extract_mail_ids(raw_query)
     results = []
-    for email_id in email_id_list[:20]:
+    for email_id in email_id_list[:int(limit_param)]:
         print(f"正在处理: {email_id}")
 
         result = get_mail_content(email_id)
@@ -840,7 +834,7 @@ def email_program(account, password, output_text):
                 "NUMBER OF CTN": info.get("NUMBER OF CTN", "N/A"),
                 "美国统包标准配送资源_number_of_ctn": info["美国统包标准配送资源"].get("number of ctn", "N/A"),
                 "美国统包标准配送资源_quantity_of_parcels": info["美国统包标准配送资源"].get("quantity of parcels",
-                                                                                             "N/A"),
+                                                                                                 "N/A"),
             }
             results.append(flat_info)
             print("提取成功！")
@@ -866,15 +860,8 @@ def email_program(account, password, output_text):
     df = pd.DataFrame(results, columns=headers)
 
     with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='预报数据', index=False, startrow=1, header=True)
+        df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
     update_output_text(output_text, f"所有邮件处理完成！")
-
-
-
-
-
-
-
 
 
 
@@ -1122,7 +1109,6 @@ def FDA_program(account, password, output_text):
 
 
 
-
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
@@ -1140,7 +1126,8 @@ def start_program(account, password, output_text, task_type, mode=None):
     if task_type == "获取email身份信息":
         email_token(account, password, output_text)
     if task_type == "email下载":
-        email_program(account, password, output_text)
+        # 保持原有调用，不改动此处
+        email_program(account, password, output_text, 101, 20)
 
 
 
@@ -1253,7 +1240,25 @@ def show_task_window(account, password, task_type):
         fg_color="#1e1e1e", text_color="#FFFFFF", corner_radius=10,
         border_width=2, border_color="#007acc"
     )
-    output_text.pack(pady=10)
+    # 非 email下载 模式，日志框按原位置显示；email下载模式下稍后再排版，保证返回按钮可见
+    if task_type != "email下载":
+        output_text.pack(pady=10)
+
+    # 仅在 email下载 模式下显示两个数字输入框
+    folder_id_entry = None
+    limit_entry = None
+    if task_type == "email下载":
+        label_folder = ctk.CTkLabel(task_frame, text="文件夹ID", text_color="#FFFFFF")
+        label_folder.pack(pady=(5, 0))
+        folder_id_entry = ctk.CTkEntry(task_frame, width=200, height=35)
+        folder_id_entry.insert(0, "101")
+        folder_id_entry.pack(pady=5)
+
+        label_limit = ctk.CTkLabel(task_frame, text="提取邮件数量", text_color="#FFFFFF")
+        label_limit.pack(pady=(5, 0))
+        limit_entry = ctk.CTkEntry(task_frame, width=200, height=35)
+        limit_entry.insert(0, "20")
+        limit_entry.pack(pady=5)
 
 
     if task_type == "梦想成真模拟器":
@@ -1338,15 +1343,47 @@ def show_task_window(account, password, task_type):
     def start_task():
         output_text.insert("end", f"启动 {task_type} 任务...\n")
 
-        threading.Thread(target=start_program, args=(account, password, output_text, task_type),
-                         daemon=True).start()
+        if task_type == "email下载":
+            # 仅此分支将参数传给 email_program
+            try:
+                folder_id_val = int(folder_id_entry.get()) if folder_id_entry else 101
+                limit_val = int(limit_entry.get()) if limit_entry else 20
+            except Exception:
+                messagebox.showerror("错误", "请输入有效的数字。")
+                return
+            threading.Thread(target=email_program, args=(account, password, output_text, folder_id_val, limit_val),
+                             daemon=True).start()
+        else:
+            threading.Thread(target=start_program, args=(account, password, output_text, task_type),
+                             daemon=True).start()
 
-    start_button = ctk.CTkButton(task_frame, text="开始任务", command=start_task)
-    start_button.pack(pady=10)
+    if task_type == "email下载":
+        # 将“开始任务”和“返回”并排放到输入框下方，整洁且始终可见
+        btn_row = ctk.CTkFrame(task_frame, fg_color="transparent")
+        btn_row.pack(pady=6)
 
-    back_button = ctk.CTkButton(task_frame, text="返回", command=lambda: go_back_to_main(task_frame, account, password),
-                                width=200, height=40, corner_radius=10)
-    back_button.pack(pady=20)
+        start_button = ctk.CTkButton(btn_row, text="开始任务", command=start_task, width=120, height=36, corner_radius=10)
+        start_button.pack(side="left", padx=6)
+
+        back_button = ctk.CTkButton(
+            btn_row, text="返回",
+            command=lambda: go_back_to_main(task_frame, account, password),
+            width=120, height=36, corner_radius=10
+        )
+        back_button.pack(side="left", padx=6)
+
+        # email下载模式下，此时再显示日志框，位于按钮下方
+        output_text.pack(pady=10)
+    else:
+        start_button = ctk.CTkButton(task_frame, text="开始任务", command=start_task)
+        start_button.pack(pady=10)
+
+        back_button = ctk.CTkButton(
+            task_frame, text="返回",
+            command=lambda: go_back_to_main(task_frame, account, password),
+            width=200, height=40, corner_radius=10
+        )
+        back_button.pack(pady=20)
 
 
 # 返回主界面并停止任务
