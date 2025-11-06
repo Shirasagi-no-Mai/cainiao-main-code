@@ -418,11 +418,6 @@ def email_token(account, password, output_text):
     sys.exit()
 
 
-
-
-
-
-
 def email_program(account, password, output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
     possible_paths = [
@@ -541,7 +536,7 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
         session.cookies.update(cookies_dict)
 
         try:
-            print(f"正在获取邮件列表...")
+            update_output_text(output_text, "正在获取邮件列表...\n")
             response = session.post(
                 url=url,
                 headers=headers,
@@ -550,33 +545,30 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
                 verify=False  # 阿里内网自签证书
             )
 
-            print(f"Status Code: {response.status_code}")
-
             if response.status_code == 200:
                 try:
                     result = response.json()
 
                     if "dataList" in result and result["dataList"]:
                         mails = result["dataList"]
-                        print(f"\n成功获取 {len(mails)} 封邮件：")
+                        update_output_text(output_text, f"成功获取 {len(mails)} 封邮件\n")
                         for mail in mails[:5]:
                             sender = mail.get("from", [{}])[0].get("name", "未知")
                             subject = mail.get("subject", "无主题")
                             date = mail.get("date", "")
                         return result
                     else:
-                        print("接口返回失败或无数据：", result)
+                        update_output_text(output_text, "接口返回失败或无数据\n")
                         return result
                 except:
-                    print("响应不是 JSON：")
+                    update_output_text(output_text, "提取到后台数据\n")
                     return response.text
             else:
-                print("请求失败：")
-                print(response.text)
+                update_output_text(output_text, "请求失败\n")
                 return None
 
         except Exception as e:
-            update_output_text(output_text,  f"请求异常,{str(e)}")
+            update_output_text(output_text,  f"请求异常: {str(e)}\n")
 
             return None
 
@@ -591,7 +583,7 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
             if match:
                 text = match.group(1)
             else:
-                print("无法解析 JSONP 格式")
+                update_output_text(output_text, "无法解析 JSONP 格式\n")
                 return []
 
         try:
@@ -603,7 +595,7 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
                     mail_ids.append(mail_id)
             return mail_ids
         except json.JSONDecodeError as e:
-            print("JSON 解析失败:", e)
+            update_output_text(output_text, f"JSON 解析失败: {e}\n")
             return []
 
     def read_cookies_from_txt():
@@ -717,7 +709,7 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
             response.raise_for_status()
             return response.json()  # 返回 dict
         except Exception as e:
-            print("请求失败:", e)
+            update_output_text(output_text, f"请求失败: {e}\n")
             return None
 
     # **************************************************************************************************************************
@@ -815,8 +807,9 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
     raw_query = get_mail_list()
     email_id_list = extract_mail_ids(raw_query)
     results = []
+    processed_count = 0
     for email_id in email_id_list[:int(limit_param)]:
-        print(f"正在处理: {email_id}")
+        # 简洁提示：正在处理某封邮件
 
         result = get_mail_content(email_id)
 
@@ -837,11 +830,11 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
                                                                                                  "N/A"),
             }
             results.append(flat_info)
-            print("提取成功！")
+            processed_count += 1
+            update_output_text(output_text, f"已处理 {processed_count} 个邮件\n")
         else:
             continue
 
-        print("=" * 60)
 
     # ========= 表头（第1行）=========
     headers = [
@@ -859,14 +852,657 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
     df = pd.DataFrame(results, columns=headers)
 
-    with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-    update_output_text(output_text, f"所有邮件处理完成！")
+    update_output_text(output_text, "正在写入 Excel...\n")
+    try:
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
+        update_output_text(output_text, f"写入完成，文件：{file_path}\n")
+    except Exception as e:
+        update_output_text(output_text, f"写入 Excel 失败: {e}\n")
+        return
+    update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
 
 
+def email_program_chicago(account, password, output_text, folder_id_param, limit_param):
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
 
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
 
+    if desktop_path:
+        file_path = os.path.join(desktop_path, "getemailord.xlsx")
+        if os.path.exists(file_path):
+            update_output_text(output_text, "已找到用于输出的excel文件，即将继续\n")
+            pass
+        else:
+            # 创建空的文本文件
+            with open(file_path, 'w', encoding='utf-8'):
+                pass
+            update_output_text(output_text, "未找到用于输出的excel文件，已生成，请再次运行代码\n")
+            sys.exit()  # 程序立即停止
+    else:
+        update_output_text(output_text, "未找到正确的桌面路径\n")
+        sys.exit()  # 程序立即停止
 
+    def read_cookies_from_txt():
+
+        txt_file_path = os.path.join(desktop_path, "emailtoken.txt")
+
+        # 3. 检查文件是否存在
+        file_exists = os.path.exists(txt_file_path)
+
+        if not file_exists:
+            update_output_text(output_text, "未找到储存身份信息的文件，请重新运行邮件身份信息程序\n")
+            return {}, None
+
+        # 4. 尝试打开文件
+        try:
+            with open(txt_file_path, 'r', encoding='utf-8') as txt_file:
+
+                # 5. 读取原始内容
+                raw_content = txt_file.read()
+
+                # 6. 重新定位文件指针 + 解析 JSON
+                txt_file.seek(0)  # 必须重置指针！read() 后指针在末尾
+                data = json.load(txt_file)
+
+                # 7. 提取 cookies 和 xsrf_token
+                cookies = data.get("cookies", {})
+                xsrf_token = data.get("xsrf_token", None)
+
+                return cookies, xsrf_token
+
+        except json.JSONDecodeError as je:
+            update_output_text(output_text, f"JSON 解析失败！错误: {je}\n")
+            update_output_text(output_text, f"错误位置: line {je.lineno}, column {je.colno}\n")
+            return {}, None
+
+        except Exception as e:
+            update_output_text(output_text, f"读取 cookie 失败: {type(e).__name__}: {e}\n")
+            return {}, None
+
+        # finally:
+        #     print("成功读取cookie\n")
+
+    def get_mail_list():
+        # Step 1: 读取 cookies 和 token
+        cookies_dict, xsrf_token = read_cookies_from_txt()
+        if not cookies_dict or not xsrf_token:
+            return None
+
+        # Step 2: 正确的邮件列表接口（来自真实抓包）
+        url = "https://mail.alibaba-inc.com/alimail/ajax/mail/queryMailList.txt"
+
+        # Step 3: 正确的请求头（来自邮箱系统）
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Connection": "keep-alive",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://mail.alibaba-inc.com",
+            "Referer": "https://mail.alibaba-inc.com/alimail/entries/v5.1/mail/folder-101/all",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "X-Requested-With": "XMLHttpRequest",
+            # 不要手动设置 Host，让 requests 自动处理
+        }
+
+        # Step 4: 正确的 payload（邮箱专用）
+        payload = {
+            "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
+            "showFrom": "1",
+            "offset": "0",
+            "length": "50",  # 每页数量
+            "_tpl_": "v5ForWebDing",
+            "_refer_hash_": "",
+            "_root_token_": "",
+            "_csrf_token_": xsrf_token
+        }
+
+        # Step 5: 发送请求
+        session = requests.Session()
+        session.cookies.update(cookies_dict)
+
+        try:
+            update_output_text(output_text, "正在获取邮件列表...\n")
+            response = session.post(
+                url=url,
+                headers=headers,
+                data=payload,
+                timeout=15,
+                verify=False  # 阿里内网自签证书
+            )
+
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+
+                    if "dataList" in result and result["dataList"]:
+                        mails = result["dataList"]
+                        update_output_text(output_text, f"成功获取 {len(mails)} 封邮件\n")
+                        for mail in mails[:5]:
+                            sender = mail.get("from", [{}])[0].get("name", "未知")
+                            subject = mail.get("subject", "无主题")
+                            date = mail.get("date", "")
+                        return result
+                    else:
+                        update_output_text(output_text, "接口返回失败或无数据\n")
+                        return result
+                except:
+                    update_output_text(output_text, "提取到后台数据\n")
+                    return response.text
+            else:
+                update_output_text(output_text, "请求失败\n")
+                return None
+
+        except Exception as e:
+            update_output_text(output_text, f"请求异常: {str(e)}\n")
+
+            return None
+
+    def extract_mail_ids(response_text):
+
+        text = response_text.strip()
+
+        # 情况1：JSONP 格式，去掉前缀和回调
+        if text.startswith("/**/") or text.startswith("jQuery"):
+            # 提取括号内的 JSON
+            match = re.search(r'\((.*)\)', text, re.DOTALL)
+            if match:
+                text = match.group(1)
+            else:
+                update_output_text(output_text, "无法解析 JSONP 格式\n")
+                return []
+
+        try:
+            data = json.loads(text)
+            mail_ids = []
+            for mail in data.get("dataList", []):
+                mail_id = mail.get("mailId")
+                if mail_id:
+                    mail_ids.append(mail_id)
+            return mail_ids
+        except json.JSONDecodeError as e:
+            update_output_text(output_text, f"JSON 解析失败: {e}\n")
+            return []
+
+    def get_mail_content(email_id):
+        """
+        输入：email_id 如 '101_0:DzzzzyKz5Ld$---.fAX-oZE'
+        输出：dict，成功返回包含 body 的数据，失败返回 None
+        """
+        # 1. 读取 cookies 和 token
+        cookies_dict, xsrf_token = read_cookies_from_txt()
+        if not cookies_dict or not xsrf_token:
+            update_output_text(output_text, "cookies.txt 读取失败！\n")
+            return None
+
+        # 2. 正确接口
+        url = "https://mail.alibaba-inc.com/alimail/ajax/mail/loadMail.txt"
+
+        # 3. 正确 payload（去掉 "mailId: " 前缀）
+        payload = {
+            "mailId": email_id,
+            "full": "1",
+            "_tpl_": "v5ForWebDing",
+            "_refer_hash_": "",
+            "_root_token_": "",
+            "_csrf_token_": xsrf_token
+        }
+
+        # 4. 动态构造 Referer（关键！必须包含正确的 base64 编码的 email_id）
+        # 构造 {id: "xxx", type: "mail", isDraftMail: false}
+        ref_payload = {
+            "id": email_id,
+            "type": "mail",
+            "isDraftMail": False
+        }
+        ref_b64 = base64.b64encode(json.dumps(ref_payload).encode('utf-8')).decode('utf-8')
+        referer = f"https://mail.alibaba-inc.com/alimail/entries/v5.1/mail/folder-101/all/{ref_b64}"
+
+        # 5. headers
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Connection": "keep-alive",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://mail.alibaba-inc.com",
+            "Referer": referer,  # 动态生成
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "X-Alimail-Trace-Id": str(uuid.uuid4())
+        }
+
+        session = requests.Session()
+        session.cookies.update(cookies_dict)
+
+        try:
+            response = session.post(
+                url=url,
+                data=payload,
+                headers=headers,
+                timeout=15,
+                verify=False
+            )
+            response.raise_for_status()
+            data = response.json()
+            # 打印完整 JSON（邮件内容）
+            try:
+                print("[JSON-邮件内容] 以下为接口返回的完整 JSON：")
+                print(json.dumps(data, ensure_ascii=False, indent=2))
+            except Exception as e:
+                print(f"[JSON-邮件内容] 打印失败: {e}")
+            return data  # 返回 dict
+        except Exception as e:
+            update_output_text(output_text, f"请求失败: {e}\n")
+            return None
+
+    # 统一渠道顺序与别名映射（定义一次，全局复用）
+    channel_order = [
+        "GOFO", "TE", "UNI", "OC-UNI", "DHL", "IB", "SPX", "ACI", "FEDEX", "USPS",
+        "ATL-GOFO", "ATL-USPS", "ATL-ACI", "ATL-DHL"
+    ]
+    # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
+    alias_to_standard = {
+        "gofo": "GOFO",
+        "te": "TE",
+        "uni": "UNI",
+        "uniuni": "UNI",
+        "ocuni": "OC-UNI",
+        "dhl": "DHL",
+        "ib": "IB",
+        "spx": "SPX",
+        "aci": "ACI",
+        "fedex": "FEDEX",
+        "fedexground": "FEDEX",
+        "usps": "USPS",
+        "atlgofo": "ATL-GOFO",
+        "atlusps": "ATL-USPS",
+        "atlaci": "ATL-ACI",
+        "atldhl": "ATL-DHL",
+        "coe": "COE/UP",
+        "coeup": "COE/UP",
+    }
+
+    # **************************************************************************************************************************
+    def extract_flight_info(response_dict):
+        """
+        从 loadMail.txt 的 response 中提取航班信息
+        返回字典，缺失字段用 "N/A"
+        """
+        try:
+            html_body = response_dict["data"]["body"]
+        except (KeyError, TypeError):
+            print("response 结构错误，缺少 data.body")
+            return {}
+
+        soup = BeautifulSoup(html_body, "html.parser")
+
+        try:
+            print("[extract_flight_info] 开始解析航班信息")
+        except Exception:
+            pass
+
+        # 正则：提取数字（支持 123, 1.23, 1,234.56）
+        num_re = re.compile(r'[\d,]+\.?\d*')
+        # 正则：匹配到分钟为止的时间（不包含时区）
+        eta_re = re.compile(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})')
+
+        # 使用统一的渠道顺序与别名映射（channel_order, alias_to_standard）
+
+        result = {
+            "MAWB": "N/A",
+            "FLIGHT NUMBER": "N/A",
+            "ETA": "N/A",
+            "NUMBER OF CTN": "N/A",
+            "GROSS WEIGHT": "N/A",
+            "QUANTITY OF PARCELS": "N/A",
+            "BUP": "N/A",
+            "美国统包标准配送资源": {
+                "number of ctn": "N/A",
+                "quantity of parcels": "N/A"
+            },
+            # 预留 COE 组合输出
+            "COE (Parcels/CTNS)": "N/A",
+        }
+
+        # 初始化渠道默认值（不包含 COE/UP）
+        for ch in channel_order:
+            result[ch] = "N/A"
+
+        # === 1. 提取主表信息 ===
+        main_table = soup.find("table", align="center")
+        if main_table:
+            try:
+                print(f"[解析主表] 找到主表，行数={len(main_table.find_all('tr'))}")
+            except Exception:
+                pass
+            rows = main_table.find_all("tr")
+            for row in rows:
+                tds = row.find_all("td")
+                if len(tds) != 2:
+                    continue
+                key = tds[0].get_text(strip=True)
+                raw_value = tds[1].get_text(strip=True)
+
+                try:
+                    print(f"[主表行] key='{key}' value_raw='{raw_value}'")
+                except Exception:
+                    pass
+
+                # 统一处理 value
+                if "ETA" in key:
+                    m = eta_re.search(raw_value)
+                    result["ETA"] = m.group(1) if m else "N/A"
+                    try:
+                        print(f"[主表解析] ETA='{result['ETA']}'")
+                    except Exception:
+                        pass
+                else:
+                    # 提取纯数字
+                    num_match = num_re.search(raw_value.replace(',', ''))  # 先去逗号再匹配
+                    value = num_match.group(0) if num_match else "N/A"
+
+                    if "MAWB No." in key:
+                        result["MAWB"] = raw_value  # MAWB 保留完整
+                        try:
+                            print(f"[主表解析] MAWB='{result['MAWB']}'")
+                        except Exception:
+                            pass
+                    elif "Flight Number" in key:
+                        result["FLIGHT NUMBER"] = raw_value
+                        try:
+                            print(f"[主表解析] FLIGHT NUMBER='{result['FLIGHT NUMBER']}'")
+                        except Exception:
+                            pass
+                    elif "Number of CTN" in key:
+                        result["NUMBER OF CTN"] = value
+                        try:
+                            print(f"[主表解析] NUMBER OF CTN='{result['NUMBER OF CTN']}'")
+                        except Exception:
+                            pass
+                    elif "Gross Weight" in key:
+                        result["GROSS WEIGHT"] = value
+                        try:
+                            print(f"[主表解析] GROSS WEIGHT='{result['GROSS WEIGHT']}'")
+                        except Exception:
+                            pass
+                    elif "Quantity of parcels" in key:
+                        result["QUANTITY OF PARCELS"] = value
+                        try:
+                            print(f"[主表解析] QUANTITY OF PARCELS='{result['QUANTITY OF PARCELS']}'")
+                        except Exception:
+                            pass
+
+        # === 2. 提取 distributor 模块：美国统包标准配送资源 ===
+        distributor_tables = soup.find_all("table", align="center")
+        target_distributor = None
+
+        for table in distributor_tables:
+            header = table.find("td", class_="distributorName")
+            if header and "美国统包标准配送资源" in header.get_text(strip=True):
+                target_distributor = table
+                break
+
+        if target_distributor:
+            try:
+                print("[解析统包] 开始解析 '美国统包标准配送资源' 模块")
+            except Exception:
+                pass
+            rows = target_distributor.find_all("tr")
+            for row in rows[1:]:  # 跳过标题行
+                tds = row.find_all("td")
+                if len(tds) != 2:
+                    continue
+                key = tds[0].get_text(strip=True)
+                raw_value = tds[1].get_text(strip=True)
+
+                num_match = num_re.search(raw_value.replace(',', ''))
+                value = num_match.group(0) if num_match else "N/A"
+
+                if "Number of CTN" in key:
+                    result["美国统包标准配送资源"]["number of ctn"] = value
+                    try:
+                        print(f"[解析统包] number of ctn='{value}'")
+                    except Exception:
+                        pass
+                elif "Quantity of parcels" in key:
+                    result["美国统包标准配送资源"]["quantity of parcels"] = value
+                    try:
+                        print(f"[解析统包] quantity of parcels='{value}'")
+                    except Exception:
+                        pass
+
+        # === 3. 提取 "The MAWB is BUP" 中的 BUP 值 ===
+        try:
+            all_text = " ".join(soup.stripped_strings)
+            m = re.search(r"The\s+MAWB\s+is\s*([A-Za-z0-9\-_/]+)", all_text, flags=re.IGNORECASE)
+            if m:
+                result["BUP"] = m.group(1)
+                try:
+                    print(f"[BUP识别] 值='{result['BUP']}'")
+                except Exception:
+                    pass
+            else:
+                # 退化方案：在包含该短语的标签中查找后续文本
+                node = soup.find(string=re.compile(r"The\s+MAWB\s+is", re.IGNORECASE))
+                if node:
+                    next_text = node.parent.get_text(strip=True)
+                    m2 = re.search(r"The\s+MAWB\s+is\s*([A-Za-z0-9\-_/]+)", next_text, flags=re.IGNORECASE)
+                    if m2:
+                        result["BUP"] = m2.group(1)
+                        try:
+                            print(f"[BUP识别-退化] 值='{result['BUP']}'")
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # === 4. 提取渠道 CTN：按行首单元格匹配渠道，第二列为 CTN ===
+        try:
+            tables = soup.find_all("table")
+            try:
+                print(f"[渠道扫描] 共{len(tables)}个表")
+            except Exception:
+                pass
+            for ti, table in enumerate(tables, start=1):
+                rows = table.find_all("tr")
+                for ri, row in enumerate(rows, start=1):
+                    tds = row.find_all("td")
+                    if len(tds) < 2:
+                        continue
+                    raw_first = tds[0].get_text(strip=True)
+                    # 规范化：小写 + 去空格/连字符
+                    norm = re.sub(r"[\s\-]+", "", raw_first.lower().strip())
+                    std = alias_to_standard.get(norm)
+                    alias_used = None
+                    if not std:
+                        # 模糊匹配：规范键包含关系，提升鲁棒性
+                        for alias_key, std_name in alias_to_standard.items():
+                            if alias_key in norm:
+                                std = std_name
+                                alias_used = alias_key
+                                break
+                        if not std:
+                            # 未识别时打印一次原文，便于后续加映射
+                            try:
+                                print(f"[渠道未识别] 表{ti}行{ri} 原文='{raw_first}' 规范键='{norm}'")
+                            except Exception:
+                                pass
+                            continue
+                    else:
+                        alias_used = 'exact'
+
+                    # 提示可能的标题或说明行（例如出现“媒体/渠道”字样），帮助排查非数据行
+                    try:
+                        if re.search(r"(媒体|渠道)", raw_first):
+                            print(f"[可能标题/说明] 表{ti}行{ri} 原文='{raw_first}' 规范键='{norm}' 匹配为'{std}'")
+                    except Exception:
+                        pass
+
+                    # COE/UP 需要组合 Parcels/CTNS（兼容 COE 文案）
+                    if std == "COE/UP":
+                        ctn_cell = tds[1].get_text(strip=True)
+                        parcels_cell = tds[2].get_text(strip=True) if len(tds) >= 3 else ""
+                        ctn_num = (num_re.search(ctn_cell.replace(',', '')) or re.search(r"\d+", ctn_cell))
+                        parcels_num = (num_re.search(parcels_cell.replace(',', '')) or re.search(r"\d+", parcels_cell))
+                        ctn_val = ctn_num.group(0) if ctn_num else "N/A"
+                        parcels_val = parcels_num.group(0) if parcels_num else "N/A"
+                        if parcels_val != "N/A" and ctn_val != "N/A":
+                            result["COE (Parcels/CTNS)"] = f"{parcels_val}/{ctn_val}"
+                        else:
+                            result["COE (Parcels/CTNS)"] = ctn_val if ctn_val != "N/A" else "N/A"
+                        # 打印 COE 的组合情况
+                        try:
+                            print(
+                                f"[渠道识别-COE] 表{ti}行{ri} 原文='{raw_first}' 规范键='{norm}' 别名='{alias_used or '直接'}' CTN='{ctn_val}' PARCELS='{parcels_val}' => 'COE (Parcels/CTNS)'='{result['COE (Parcels/CTNS)']}'"
+                            )
+                        except Exception:
+                            pass
+                        continue
+
+                    # 其它渠道：第二列即 CTN（避免后续 '0' 覆盖已有非零值；重复出现时取最大值）
+                    ctn_cell = tds[1].get_text(strip=True)
+                    num_match = num_re.search(ctn_cell.replace(',', ''))
+                    new_value_str = num_match.group(0) if num_match else (ctn_cell if ctn_cell else "N/A")
+
+                    def to_int(s):
+                        try:
+                            s_clean = str(s).replace(',', '').strip()
+                            if s_clean.isdigit():
+                                return int(s_clean)
+                            # 处理可能的 "23/45" 或包含其他字符的情况，只取首个数字
+                            m = re.search(r"\d+", s_clean)
+                            return int(m.group(0)) if m else None
+                        except Exception:
+                            return None
+
+                    old_value_str = result.get(std, "N/A")
+                    old_n = to_int(old_value_str)
+                    new_n = to_int(new_value_str)
+
+                    # 决策：
+                    # - 如果旧值为空/N/A/非数字，而新值是数字 => 采用新值
+                    # - 如果旧值为数字，新值为空/N/A/非数字 => 保留旧值
+                    # - 如果两者都是数字 => 采用最大值（避免被 '0' 覆盖）
+                    chosen_str = old_value_str
+                    if old_n is None and new_n is not None:
+                        chosen_str = str(new_n)
+                    elif old_n is not None and new_n is None:
+                        chosen_str = str(old_n)
+                    elif old_n is not None and new_n is not None:
+                        chosen_str = str(max(old_n, new_n))
+                    else:
+                        # 两者都非数字：若旧值为 N/A 且新值有内容，则采用新值
+                        if (str(old_value_str).upper() == "N/A") and (str(new_value_str).strip()):
+                            chosen_str = new_value_str
+
+                    result[std] = chosen_str
+
+                    # 调试打印：显示每一行识别与覆盖决策（表序/行序/别名匹配）
+                    try:
+                        print(
+                            f"[渠道识别] 表{ti}行{ri} 标准='{std}' 原文='{raw_first}' 规范='{norm}' 匹配='{alias_used}' 第二列='{ctn_cell}' 旧='{old_value_str}' 新='{new_value_str}' => 取='{chosen_str}'"
+                        )
+                    except Exception:
+                        pass
+
+                    # 若最终值仍为 N/A 或空，输出原因提示
+                    try:
+                        if str(chosen_str).strip() in ("", "N/A"):
+                            print(
+                                f"[未提取-无数值] 表{ti}行{ri} 标准='{std}' 第二列='{ctn_cell}' 解析数字='{new_value_str}'"
+                            )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        return result
+
+    raw_query = get_mail_list()
+    email_id_list = extract_mail_ids(raw_query)
+    results = []
+    processed_count = 0
+    for email_id in email_id_list[:int(limit_param)]:
+
+        result = get_mail_content(email_id)
+
+        if result and result.get("status") in [0, 6]:
+            info = extract_flight_info(result)  # 调用你定义的函数
+
+            # 渠道汇总调试打印：按既定顺序输出各渠道的最终值
+            try:
+                summary = {ch: info.get(ch, 'N/A') for ch in channel_order}
+                print(f"[渠道汇总] {summary}")
+                print(f"[UNI最终值] {info.get('UNI', 'N/A')}")
+            except Exception:
+                pass
+
+            # 展平数据：按你指定的头部顺序
+            flat_info = {
+                "MAWB #": info.get("MAWB", "N/A"),
+                "FLIGHT #": info.get("FLIGHT NUMBER", "N/A"),
+                "PMC": info.get("BUP", "N/A"),
+                "PMC #": "",
+                "PICKUP": "",
+                "ETA": info.get("ETA", "N/A"),
+                "INBOUND 2020": "",
+                "CUSTOMS RELEASE": "",
+                "HOLD": "",
+                "WEIGHT (KG)": info.get("GROSS WEIGHT", "N/A"),
+                "CTNS": info.get("NUMBER OF CTN", "N/A"),
+                "PARCELS": info.get("QUANTITY OF PARCELS", "N/A"),
+                "COE (Parcels/CTNS)": info.get("COE (Parcels/CTNS)", "N/A"),
+            }
+
+            # 追加渠道 CTN（按统一顺序）
+            for ch in channel_order:
+                flat_info[ch] = info.get(ch, "N/A")
+            results.append(flat_info)
+            processed_count += 1
+            update_output_text(output_text, f"已处理 {processed_count} 个邮件\n")
+        else:
+            continue
+    
+
+    # ========= 表头（第1行）=========
+    # 最终表头（按你给定的顺序与命名）
+    header_fixed = [
+        "MAWB #", "FLIGHT #", "PMC", "PMC #", "PICKUP", "ETA", "INBOUND 2020", "CUSTOMS RELEASE", "HOLD",
+        "WEIGHT (KG)", "CTNS", "PARCELS", "COE (Parcels/CTNS)",
+    ]
+    header_keys = header_fixed + channel_order
+
+    # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
+    df = pd.DataFrame(results, columns=header_keys)
+
+    update_output_text(output_text, "正在写入 Excel...\n")
+    try:
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
+        update_output_text(output_text, f"写入完成，文件：{file_path}\n")
+    except Exception as e:
+        update_output_text(output_text, f"写入 Excel 失败: {e}\n")
+        return
+    update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
 
 
 def FDA_program(account, password, output_text):
@@ -1128,6 +1764,10 @@ def start_program(account, password, output_text, task_type, mode=None):
     if task_type == "email下载":
         # 保持原有调用，不改动此处
         email_program(account, password, output_text, 101, 20)
+    if task_type == "email下载 ord":
+        # 保持原有调用，不改动此处
+        email_program_chicago(account, password, output_text, 101, 20)
+        
 
 
 
@@ -1202,6 +1842,7 @@ def show_main_window(account, password):
                   ("获取节点身份信息", lambda: switch_to_task("获取节点身份信息")),
                   ("获取email身份信息",lambda: switch_to_task("获取email身份信息")),
                   ("email下载", lambda: switch_to_task("email下载")),
+                  ("email下载 ord", lambda: switch_to_task("email下载 ord")),
                   ("梦想成真模拟器", lambda: switch_to_task("梦想成真模拟器"))
 
               ] + [("未解锁功能", None)] * 8  # 增加点按钮以便显示滚动效果
@@ -1241,13 +1882,13 @@ def show_task_window(account, password, task_type):
         border_width=2, border_color="#007acc"
     )
     # 非 email下载 模式，日志框按原位置显示；email下载模式下稍后再排版，保证返回按钮可见
-    if task_type != "email下载":
+    if task_type != "email下载" and task_type != "email下载 ord":
         output_text.pack(pady=10)
 
-    # 仅在 email下载 模式下显示两个数字输入框
+    # 在 email下载 与 email下载 ord 模式下显示两个数字输入框
     folder_id_entry = None
     limit_entry = None
-    if task_type == "email下载":
+    if task_type == "email下载" or task_type == "email下载 ord":
         label_folder = ctk.CTkLabel(task_frame, text="文件夹ID", text_color="#FFFFFF")
         label_folder.pack(pady=(5, 0))
         folder_id_entry = ctk.CTkEntry(task_frame, width=200, height=35)
@@ -1342,22 +1983,28 @@ def show_task_window(account, password, task_type):
 
     def start_task():
         output_text.insert("end", f"启动 {task_type} 任务...\n")
-
-        if task_type == "email下载":
-            # 仅此分支将参数传给 email_program
+        # 在 email 下载模式下，读取输入并调用对应函数；否则调用通用 start_program
+        if task_type == "email下载" or task_type == "email下载 ord":
             try:
                 folder_id_val = int(folder_id_entry.get()) if folder_id_entry else 101
                 limit_val = int(limit_entry.get()) if limit_entry else 20
             except Exception:
                 messagebox.showerror("错误", "请输入有效的数字。")
                 return
-            threading.Thread(target=email_program, args=(account, password, output_text, folder_id_val, limit_val),
-                             daemon=True).start()
-        else:
-            threading.Thread(target=start_program, args=(account, password, output_text, task_type),
-                             daemon=True).start()
 
-    if task_type == "email下载":
+            target_func = email_program if task_type == "email下载" else email_program_chicago
+            threading.Thread(
+                target=target_func,
+                args=(account, password, output_text, folder_id_val, limit_val),
+                daemon=True
+            ).start()
+        else:
+            threading.Thread(
+                target=start_program,
+                args=(account, password, output_text, task_type),
+                daemon=True
+            ).start()
+    if task_type == "email下载" or task_type == "email下载 ord":
         # 将“开始任务”和“返回”并排放到输入框下方，整洁且始终可见
         btn_row = ctk.CTkFrame(task_frame, fg_color="transparent")
         btn_row.pack(pady=6)
@@ -1398,7 +2045,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("冷知识，生鱼片是死鱼片。")
+root.title("还没想好叫啥")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
