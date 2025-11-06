@@ -206,7 +206,7 @@ def node_token(account, password, output_text):
     login_button = driver.find_element(By.XPATH,
                                        "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
     login_button.click()
-    WebDriverWait(driver, 10).until(EC.title_contains("Manifest"))  # 等待页面标题更新为登录后的内容
+    WebDriverWait(driver, 120).until(EC.title_contains("Manifest"))  # 等待页面标题更新为登录后的内容
     print("Current page title is:", driver.title)
 
     def get_cookies_from_driver(driver):
@@ -334,7 +334,7 @@ def email_token(account, password, output_text):
     login_button = driver.find_element(By.XPATH,
                                        "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
     login_button.click()
-    WebDriverWait(driver, 10).until(EC.title_contains("阿里邮箱"))  # 等待页面标题更新为登录后的内容
+    WebDriverWait(driver, 120).until(EC.title_contains("阿里邮箱"))  # 等待页面标题更新为登录后的内容
     print("Current page title is:", driver.title)
 
     def get_cookies_dict(driver):
@@ -2045,7 +2045,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("还没想好叫啥")
+root.title("还没想好叫啥2")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
