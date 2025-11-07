@@ -1469,6 +1469,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
                 "HOLD": "",
                 "WEIGHT (KG)": info.get("GROSS WEIGHT", "N/A"),
                 "CTNS": info.get("NUMBER OF CTN", "N/A"),
+                "PORT": "",
                 "PARCELS": info.get("QUANTITY OF PARCELS", "N/A"),
                 "COE (Parcels/CTNS)": info.get("COE (Parcels/CTNS)", "N/A"),
             }
@@ -1487,7 +1488,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
     # 最终表头（按你给定的顺序与命名）
     header_fixed = [
         "MAWB #", "FLIGHT #", "PMC", "PMC #", "PICKUP", "ETA", "INBOUND 2020", "CUSTOMS RELEASE", "HOLD",
-        "WEIGHT (KG)", "CTNS", "PARCELS", "COE (Parcels/CTNS)",
+        "WEIGHT (KG)", "CTNS", "PARCELS","PORT", "COE (Parcels/CTNS)",
     ]
     header_keys = header_fixed + channel_order
 
