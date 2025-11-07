@@ -1116,31 +1116,30 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "GOFO", "TE", "UNI", "OC-UNI", "DHL", "IB", "SPX", "ACI", "FEDEX", "USPS",
+        "GOFO", "TE", "TE-DF", "UNI", "OC-UNI", "DHL", "IB", "SPX", "ACI", "FEDEX", "USPS",
         "ATL-GOFO", "ATL-USPS", "ATL-ACI", "ATL-DHL"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
-    alias_to_standard = {
-        "gofo": "GOFO",
-        "te": "TE",
-        "uni": "UNI",
-        "uniuni": "UNI",
-        "ocuni": "OC-UNI",
-        "dhl": "DHL",
-        "ib": "IB",
-        "spx": "SPX",
-        "aci": "ACI",
-        "fedex": "FEDEX",
-        "fedexground": "FEDEX",
-        "usps": "USPS",
-        "atlgofo": "ATL-GOFO",
-        "atlusps": "ATL-USPS",
-        "atlaci": "ATL-ACI",
-        "atldhl": "ATL-DHL",
-        "coe": "COE/UP",
-        "coeup": "COE/UP",
+    exact_match_to_std = {
+        "GOFO": "GOFO",
+        "TOOEXPRESS": "TE",
+        "TOOEXPRESS-DF": "TE-DF",
+        "UNIUNI": "UNI",
+        "OC-UNI": "OC-UNI",
+        "DHL": "DHL",
+        "IB": "IB",
+        "SPX": "SPX",
+        "ACI": "ACI",
+        "FEDEX GROUND": "FEDEX",
+        "USPS-GA": "USPS",
+        "COE": "COE/UP",
     }
-
+    contains_match_to_std = {
+        "ATL-GOFO": "ATL-GOFO",
+        "ATL-USPS": "ATL-USPS",
+        "ATL-ACI": "ATL-ACI",
+        "ATL-DHL": "ATL-DHL",
+    }
     # **************************************************************************************************************************
     def extract_flight_info(response_dict):
         """
@@ -1186,7 +1185,6 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
         # 初始化渠道默认值（不包含 COE/UP）
         for ch in channel_order:
             result[ch] = "N/A"
-
         # === 1. 提取主表信息 ===
         main_table = soup.find("table", align="center")
         if main_table:
@@ -1316,49 +1314,64 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
             pass
 
         # === 4. 提取渠道 CTN：按行首单元格匹配渠道，第二列为 CTN ===
+        unmatched_cells = []  # 用来收集未匹配的 <td> 内容
         try:
             tables = soup.find_all("table")
             try:
                 print(f"[渠道扫描] 共{len(tables)}个表")
             except Exception:
                 pass
+
             for ti, table in enumerate(tables, start=1):
                 rows = table.find_all("tr")
                 for ri, row in enumerate(rows, start=1):
                     tds = row.find_all("td")
                     if len(tds) < 2:
                         continue
-                    raw_first = tds[0].get_text(strip=True)
-                    # 规范化：小写 + 去空格/连字符
-                    norm = re.sub(r"[\s\-]+", "", raw_first.lower().strip())
-                    std = alias_to_standard.get(norm)
-                    alias_used = None
+
+                    raw_first = tds[0].get_text(strip=True).strip()
+                    if not raw_first:
+                        continue
+
+                    # 过滤主表标题行
+                    if any(keyword in raw_first for keyword in [
+                        "MAWB", "Flight", "origin", "destination", "ETD", "ETA",
+                        "Number of CTN", "Gross Weight", "Quantity", "parcels"
+                    ]):
+                        print(f"[跳过主表标题] 原文='{raw_first}'")
+                        continue
+
+                    # ---------- 1. 完全匹配 ----------
+                    std = exact_match_to_std.get(raw_first)  # 完全相等
+                    match_type = "exact" if std else None
+
+                    # ---------- 2. 包含匹配 ----------
                     if not std:
-                        # 模糊匹配：规范键包含关系，提升鲁棒性
-                        for alias_key, std_name in alias_to_standard.items():
-                            if alias_key in norm:
-                                std = std_name
-                                alias_used = alias_key
+                        for keyword, target in contains_match_to_std.items():
+                            if keyword in raw_first:
+                                std = target
+                                match_type = "contains"
                                 break
-                        if not std:
-                            # 未识别时打印一次原文，便于后续加映射
-                            try:
-                                print(f"[渠道未识别] 表{ti}行{ri} 原文='{raw_first}' 规范键='{norm}'")
-                            except Exception:
-                                pass
-                            continue
-                    else:
-                        alias_used = 'exact'
 
-                    # 提示可能的标题或说明行（例如出现“媒体/渠道”字样），帮助排查非数据行
-                    try:
-                        if re.search(r"(媒体|渠道)", raw_first):
-                            print(f"[可能标题/说明] 表{ti}行{ri} 原文='{raw_first}' 规范键='{norm}' 匹配为'{std}'")
-                    except Exception:
-                        pass
+                    # ---------- 3. 没匹配到 → 记录 ----------
+                    if not std:
+                        unmatched_cells.append(raw_first)
+                        try:
+                            print(f"[渠道未识别] 表{ti}行{ri} 原文='{raw_first}'")
+                        except Exception:
+                            pass
+                        continue
 
-                    # COE/UP 需要组合 Parcels/CTNS（兼容 COE 文案）
+                    # ---------- 4. 标题/说明行过滤（可选） ----------
+                    if re.search(r"(媒体|渠道)", raw_first):
+                        try:
+                            print(f"[可能标题/说明] 表{ti}行{ri} 原文='{raw_first}' → 匹配为'{std}'")
+                        except Exception:
+                            pass
+
+                    # ---------- 5. COE/UP 组合 ----------
                     if std == "COE/UP":
+                        # （保持原来的 COE 逻辑不变）
                         ctn_cell = tds[1].get_text(strip=True)
                         parcels_cell = tds[2].get_text(strip=True) if len(tds) >= 3 else ""
                         ctn_num = (num_re.search(ctn_cell.replace(',', '')) or re.search(r"\d+", ctn_cell))
@@ -1369,26 +1382,24 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
                             result["COE (Parcels/CTNS)"] = f"{parcels_val}/{ctn_val}"
                         else:
                             result["COE (Parcels/CTNS)"] = ctn_val if ctn_val != "N/A" else "N/A"
-                        # 打印 COE 的组合情况
                         try:
                             print(
-                                f"[渠道识别-COE] 表{ti}行{ri} 原文='{raw_first}' 规范键='{norm}' 别名='{alias_used or '直接'}' CTN='{ctn_val}' PARCELS='{parcels_val}' => 'COE (Parcels/CTNS)'='{result['COE (Parcels/CTNS)']}'"
-                            )
+                                f"[渠道识别-COE] 表{ti}行{ri} 原文='{raw_first}' CTN='{ctn_val}' PARCELS='{parcels_val}'")
                         except Exception:
                             pass
                         continue
 
-                    # 其它渠道：第二列即 CTN（避免后续 '0' 覆盖已有非零值；重复出现时取最大值）
+                    # ---------- 6. 普通渠道 CTN ----------
                     ctn_cell = tds[1].get_text(strip=True)
                     num_match = num_re.search(ctn_cell.replace(',', ''))
                     new_value_str = num_match.group(0) if num_match else (ctn_cell if ctn_cell else "N/A")
 
+                    # （下面的 to_int、覆盖逻辑保持原样）
                     def to_int(s):
                         try:
                             s_clean = str(s).replace(',', '').strip()
                             if s_clean.isdigit():
                                 return int(s_clean)
-                            # 处理可能的 "23/45" 或包含其他字符的情况，只取首个数字
                             m = re.search(r"\d+", s_clean)
                             return int(m.group(0)) if m else None
                         except Exception:
@@ -1398,10 +1409,6 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
                     old_n = to_int(old_value_str)
                     new_n = to_int(new_value_str)
 
-                    # 决策：
-                    # - 如果旧值为空/N/A/非数字，而新值是数字 => 采用新值
-                    # - 如果旧值为数字，新值为空/N/A/非数字 => 保留旧值
-                    # - 如果两者都是数字 => 采用最大值（避免被 '0' 覆盖）
                     chosen_str = old_value_str
                     if old_n is None and new_n is not None:
                         chosen_str = str(new_n)
@@ -1410,33 +1417,25 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
                     elif old_n is not None and new_n is not None:
                         chosen_str = str(max(old_n, new_n))
                     else:
-                        # 两者都非数字：若旧值为 N/A 且新值有内容，则采用新值
-                        if (str(old_value_str).upper() == "N/A") and (str(new_value_str).strip()):
+                        if str(old_value_str).upper() == "N/A" and str(new_value_str).strip():
                             chosen_str = new_value_str
 
                     result[std] = chosen_str
 
-                    # 调试打印：显示每一行识别与覆盖决策（表序/行序/别名匹配）
                     try:
                         print(
-                            f"[渠道识别] 表{ti}行{ri} 标准='{std}' 原文='{raw_first}' 规范='{norm}' 匹配='{alias_used}' 第二列='{ctn_cell}' 旧='{old_value_str}' 新='{new_value_str}' => 取='{chosen_str}'"
+                            f"[渠道识别] 表{ti}行{ri} 标准='{std}' 原文='{raw_first}' 匹配方式='{match_type}' "
+                            f"第二列='{ctn_cell}' 旧='{old_value_str}' 新='{new_value_str}' => 取='{chosen_str}'"
                         )
                     except Exception:
                         pass
 
-                    # 若最终值仍为 N/A 或空，输出原因提示
-                    try:
-                        if str(chosen_str).strip() in ("", "N/A"):
-                            print(
-                                f"[未提取-无数值] 表{ti}行{ri} 标准='{std}' 第二列='{ctn_cell}' 解析数字='{new_value_str}'"
-                            )
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[渠道提取异常] {e}")
 
+        # 把未匹配的单元格内容放进结果（后面写 Excel 时取）
+        result["未识别渠道"] = " | ".join(unmatched_cells) if unmatched_cells else "N/A"
         return result
-
     raw_query = get_mail_list()
     email_id_list = extract_mail_ids(raw_query)
     results = []
@@ -1458,25 +1457,27 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
 
             # 展平数据：按你指定的头部顺序
             flat_info = {
+                "未识别渠道": info.get("未识别渠道", "N/A"),
                 "MAWB #": info.get("MAWB", "N/A"),
                 "FLIGHT #": info.get("FLIGHT NUMBER", "N/A"),
                 "PMC": info.get("BUP", "N/A"),
-                "PMC #": "",
-                "PICKUP": "",
                 "ETA": info.get("ETA", "N/A"),
+                "PICKUP": "",
+                "WEIGHT (KG)": info.get("GROSS WEIGHT", "N/A"),
+                "CTNS": info.get("NUMBER OF CTN", "N/A"),
+                "PARCELS": info.get("QUANTITY OF PARCELS", "N/A"),
+                "PMC #": "",
                 "INBOUND 2020": "",
                 "CUSTOMS RELEASE": "",
                 "HOLD": "",
-                "WEIGHT (KG)": info.get("GROSS WEIGHT", "N/A"),
-                "CTNS": info.get("NUMBER OF CTN", "N/A"),
-                "PORT": "",
-                "PARCELS": info.get("QUANTITY OF PARCELS", "N/A"),
                 "COE (Parcels/CTNS)": info.get("COE (Parcels/CTNS)", "N/A"),
+
             }
 
             # 追加渠道 CTN（按统一顺序）
             for ch in channel_order:
                 flat_info[ch] = info.get(ch, "N/A")
+            flat_info["未识别渠道"] = info.get("未识别渠道", "N/A")
             results.append(flat_info)
             processed_count += 1
             update_output_text(output_text, f"已处理 {processed_count} 个邮件\n")
@@ -1486,9 +1487,10 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
 
     # ========= 表头（第1行）=========
     # 最终表头（按你给定的顺序与命名）
-    header_fixed = [
-        "MAWB #", "FLIGHT #", "PMC", "PMC #", "PICKUP", "ETA", "INBOUND 2020", "CUSTOMS RELEASE", "HOLD",
-        "WEIGHT (KG)", "CTNS", "PARCELS","PORT", "COE (Parcels/CTNS)",
+    header_fixed = ["未识别渠道",
+        "MAWB #", "FLIGHT #", "PMC", "ETA", "PICKUP","WEIGHT (KG)", "CTNS","PARCELS","PMC #",  "INBOUND 2020", "CUSTOMS RELEASE", "HOLD",
+           "COE (Parcels/CTNS)",
+          # 新增：放在 COE 之后，渠道之前
     ]
     header_keys = header_fixed + channel_order
 
@@ -1504,6 +1506,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
         return
     update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
+
 
 
 def FDA_program(account, password, output_text):
