@@ -202,22 +202,12 @@ def node_token(account, password, output_text):
     password_field.clear()  # 清除输入框中的任何内容
     password_field.send_keys(password)  # 输入密码
 
-    # 点击登录按钮
-    initial_title = driver.title
-    initial_url   = driver.current_url
-    
-    update_output_text(output_text, f"Current page title: {driver.title}")
-    
-    def page_changed(t, u):
-        def _pred(d): return d.title != t or d.current_url != u
-        return _pred
-    
-    try:
-        WebDriverWait(driver, 50).until(page_changed(initial_title, initial_url))
-        update_output_text(output_text, f"Current page title is: {driver.title}")
-    except Exception as e:
-        update_output_text(output_text, f"登录失败或超时: {str(e)}")
-        raise
+    login_button = driver.find_element(By.XPATH,
+                                       "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
+    login_button.click()
+    WebDriverWait(driver, 10).until(EC.title_contains("Manifest"))  # 等待页面标题更新为登录后的内容
+    print("Current page title is:", driver.title)ge title is:", driver.title)
+        
 
     def get_cookies_from_driver(driver):
         try:
@@ -344,11 +334,23 @@ def email_token(account, password, output_text):
     login_button = driver.find_element(By.XPATH,
                                        "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
     login_button.click()
-    time.sleep(20)
-    update_output_text(output_text, f"Current page title is:{driver.title}")
 
-    WebDriverWait(driver, 50).until(EC.title_contains("阿里邮箱"))  # 等待页面标题更新为登录后的内容
-    print("Current page title is:", driver.title)
+    
+    initial_title = driver.title
+    initial_url   = driver.current_url
+    
+    update_output_text(output_text, f"Current page title: {driver.title}")
+    
+    def page_changed(t, u):
+        def _pred(d): return d.title != t or d.current_url != u
+        return _pred
+    
+    try:
+        WebDriverWait(driver, 50).until(page_changed(initial_title, initial_url))
+        update_output_text(output_text, f"Current page title is: {driver.title}")
+    except Exception as e:
+        update_output_text(output_text, f"登录失败或超时: {str(e)}")
+        raise
 
     def get_cookies_dict(driver):
         """从浏览器中提取登录信息（Cookies）"""
@@ -2098,7 +2100,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("测试维护中")
+root.title("测试维护完成")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
