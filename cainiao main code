@@ -203,11 +203,21 @@ def node_token(account, password, output_text):
     password_field.send_keys(password)  # 输入密码
 
     # 点击登录按钮
-    login_button = driver.find_element(By.XPATH,
-                                       "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
-    login_button.click()
-    WebDriverWait(driver, 120).until(EC.title_contains("Manifest"))  # 等待页面标题更新为登录后的内容
-    print("Current page title is:", driver.title)
+    initial_title = driver.title
+    initial_url   = driver.current_url
+    
+    update_output_text(output_text, f"Current page title: {driver.title}")
+    
+    def page_changed(t, u):
+        def _pred(d): return d.title != t or d.current_url != u
+        return _pred
+    
+    try:
+        WebDriverWait(driver, 50).until(page_changed(initial_title, initial_url))
+        update_output_text(output_text, f"Current page title is: {driver.title}")
+    except Exception as e:
+        update_output_text(output_text, f"登录失败或超时: {str(e)}")
+        raise
 
     def get_cookies_from_driver(driver):
         try:
