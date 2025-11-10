@@ -333,6 +333,7 @@ def email_token(account, password, output_text):
     login_button = driver.find_element(By.XPATH,
                                        "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
     login_button.click()
+    update_output_text(output_text, "登录成功，等待标题变化中\n\n")
 
     
     initial_title = driver.title
@@ -350,6 +351,7 @@ def email_token(account, password, output_text):
     except Exception as e:
         update_output_text(output_text, f"登录失败或超时: {str(e)}")
         raise
+    update_output_text(output_text, "检测到标题变化，即将获取token\n\n")
 
     def get_cookies_dict(driver):
         """从浏览器中提取登录信息（Cookies）"""
@@ -2099,7 +2101,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("测试维护完成")
+root.title("测试维护")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
