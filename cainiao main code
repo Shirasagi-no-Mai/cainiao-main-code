@@ -334,89 +334,125 @@ def email_token(account, password, output_text):
     login_button = driver.find_element(By.XPATH,
                                        "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
     login_button.click()
-    WebDriverWait(driver, 120).until(EC.title_contains("阿里邮箱"))  # 等待页面标题更新为登录后的内容
+    WebDriverWait(driver, 10).until(EC.title_contains("阿里邮箱"))  # 等待页面标题更新为登录后的内容
     print("Current page title is:", driver.title)
 
     def get_cookies_dict(driver):
-        """从 Selenium driver 提取 cookies，返回 {name: value} 字典"""
-        cookies = driver.get_cookies()
-        cookies_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-        print(f"[写入] 提取到 {len(cookies_dict)} 个 Cookie")
-        return cookies_dict
+        """从浏览器中提取登录信息（Cookies）"""
+        try:
+            cookies = driver.get_cookies()
+            cookies_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            update_output_text(output_text, f"[写入] 成功提取到 {len(cookies_dict)} 个登录信息")
+            return cookies_dict
+        except Exception as e:
+            error_detail = str(e)
+            update_output_text(output_text,
+                               "获取登录信息失败，请检查是否已登录或网络正常\n"
+                               f"【技术详情】{error_detail}"
+                               )
+            return {}
 
     def get_xsrf_token(driver):
-        """智能提取 xsrf_token，优先级：Cookie > meta > 正则"""
-        cookies = driver.get_cookies()
-
-        # 策略1：从 Cookie 名中找（最稳！）
-        for cookie in cookies:
-            name = cookie['name']
-            normalized = name.lower().replace('_', '').replace('-', '')
-            if normalized in ['xsrf_token', 'xsrftoken', '_csrf_token_', 'csrftoken', 'csrf_token']:
-                print(f"[写入] 从 Cookie 找到 xsrf_token: {name} = {cookie['value']}")
-                return cookie['value']
-
-        # 策略2：从 <meta name="xsrf-token" content="..."> 找
+        """智能查找安全校验码（xsrf_token）"""
         try:
-            meta = driver.find_element("css selector", "meta[name*='xsrf' i], meta[name*='csrf' i]")
-            token = meta.get_attribute("content")
-            if token:
-                print(f"[写入] 从 meta 标签找到 xsrf_token: {token}")
-                return token
-        except:
-            pass
+            cookies = driver.get_cookies()
 
-        # 策略3：正则扫页面（兜底）
-        patterns = [
-            r'"_?xsrf[-_]?token_?"\s*:\s*"([^"]+)"',
-            r'"_?csrf[-_]?token_?"\s*:\s*"([^"]+)"',
-            r'data-xsrf=["\']([^"\']+)["\']'
-        ]
-        for p in patterns:
-            m = re.search(p, driver.page_source, re.I)
-            if m:
-                print(f"[写入] 正则匹配到 xsrf_token: {m.group(1)}")
-                return m.group(1)
+            # 策略1：从 Cookie 中找
+            for cookie in cookies:
+                name = cookie['name']
+                normalized = name.lower().replace('_', '').replace('-', '')
+                if normalized in ['xsrf_token', 'xsrftoken', '_csrf_token_', 'csrftoken', 'csrf_token']:
+                    update_output_text(output_text, f"[写入] 从登录信息中找到安全校验码")
+                    return cookie['value']
 
-        print("[写入] 未找到 xsrf_token，保存为 None")
-        return None
+            # 策略2：从 meta 标签找
+            try:
+                meta = driver.find_element("css selector", "meta[name*='xsrf' i], meta[name*='csrf' i]")
+                token = meta.get_attribute("content")
+                استخر
+                if token:
+                    update_output_text(output_text, f"[写入] 从网页标签中找到安全校验码")
+                    return token
+            except:
+                pass  # 继续下一个策略
+
+            # 策略3：正则搜索源码
+            patterns = [
+                r'"_?xsrf[-_]?token_?"\s*:\s*"([^"]+)"',
+                r'"_?csrf[-_]?token_?"\s*:\s*"([^"]+)"',
+                r'data-xsrf=["\']([^"\']+)["\']'
+            ]
+            for p in patterns:
+                m = re.search(p, driver.page_source, re.I)
+                if m:
+                    update_output_text(output_text, f"[写入] 从网页源码中找到安全校验码")
+                    return m.group(1)
+
+            update_output_text(output_text, "[写入] 未找到安全校验码，将保存为空")
+            return None
+
+        except Exception as e:
+            error_detail = str(e)
+            update_output_text(output_text,
+                               "查找安全校验码失败，可能是页面未加载完成\n"
+                               f"【技术详情】{error_detail}"
+                               )
+            return None
 
     def save_cookies_and_token(driver, desktop_path):
         if not desktop_path:
-            print("desktop_path 未定义，跳过保存")
+            update_output_text(output_text, "保存路径未设置，跳过保存")
             return
 
         txt_file_path = os.path.join(desktop_path, "emailtoken.txt")
-        print(f"\n=== 开始写入 {txt_file_path} ===")
+        update_output_text(output_text, f"\n=== 正在保存到桌面: emailtoken.txt ===")
 
-        # 获取数据
-        cookies_dict = get_cookies_dict(driver)
-        xsrf_token = get_xsrf_token(driver)
-        driver.quit()
-        # 构建保存结构（和你 read 函数完全一致）
-        save_data = {
-            "cookies": cookies_dict,
-            "xsrf_token": xsrf_token  # 允许为 None
-        }
-
-        # 写入文件（美化 JSON）
         try:
+            # 获取数据
+            cookies_dict = get_cookies_dict(driver)
+            xsrf_token = get_xsrf_token(driver)
+            driver.quit()
+
+            # 准备保存内容
+            save_data = {
+                "cookies": cookies_dict,
+                "xsrf_token": xsrf_token
+            }
+
+            # 写入文件
             with open(txt_file_path, 'w', encoding='utf-8') as f:
                 json.dump(save_data, f, ensure_ascii=False, indent=2)
-            print(f"写入成功！文件路径: {txt_file_path}")
-            print(f"   └─ cookies 数量: {len(cookies_dict)}")
-            print(f"   └─ xsrf_token: {xsrf_token[:50]}{'...' if xsrf_token and len(xsrf_token) > 50 else ''}")
+
+            # 成功提示
+            update_output_text(output_text, f"保存成功！文件路径：{txt_file_path}")
+            update_output_text(output_text, f"   └─ 登录信息：{len(cookies_dict)} 条")
+            token_preview = (xsrf_token[:50] + "..." if xsrf_token and len(xsrf_token) > 50 else xsrf_token) or "未获取到"
+            update_output_text(output_text, f"   └─ 安全校验码：{token_preview}")
+
+        except PermissionError as e:
+            update_output_text(output_text,
+                               "保存失败：没有权限写入桌面\n"
+                               "请关闭占用 emailtoken.txt 的程序，或以管理员运行\n"
+                               f"【技术详情】{str(e)}"
+                               )
+        except OSError as e:
+            update_output_text(output_text,
+                               "保存失败：磁盘空间不足或路径无效\n"
+                               f"【技术详情】{str(e)}"
+                               )
         except Exception as e:
-            print(f"写入失败: {e}")
+            update_output_text(output_text,
+                               "保存过程中出现未知错误，请重试\n"
+                               f"【技术详情】{str(e)}"
+                               )
         finally:
-            print("=== 写入结束 ===\n")
+            update_output_text(output_text, "=== 保存操作已结束 ===\n")
 
     save_cookies_and_token(driver, desktop_path)
     update_output_text(output_text, "已经临时的email代码写入桌面文件\n\n")
 
     # 写入完成后可选择退出
     sys.exit()
-
 
 def email_program(account, password, output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
@@ -2049,7 +2085,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("还没想好叫啥2")
+root.title("测试维护中")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
