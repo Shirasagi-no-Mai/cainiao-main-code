@@ -385,7 +385,7 @@ def email_token(account, password, output_text):
             try:
                 meta = driver.find_element("css selector", "meta[name*='xsrf' i], meta[name*='csrf' i]")
                 token = meta.get_attribute("content")
-                استخر
+            
                 if token:
                     update_output_text(output_text, f"[写入] 从网页标签中找到安全校验码")
                     return token
