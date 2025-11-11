@@ -3058,7 +3058,7 @@ def show_task_window(account, password, task_type):
             elif task_type == "实报实销lax":
                 target_func = wipe_off_lax
             elif task_type == "实报实销ord":
-                target_func = wipe_off_lax
+                target_func = wipe_off_ord
 
 
 
