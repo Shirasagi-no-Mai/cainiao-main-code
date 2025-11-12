@@ -1158,9 +1158,7 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "GOFO", "TE",  # ← 只保留 TE
-        "UNI", "OC-UNI", "DHL", "IB", "SPX", "ACI", "FEDEX", "USPS",
-        "ATL-GOFO", "ATL-USPS", "ATL-ACI", "ATL-DHL"
+        "COE/UP", "DHLe", "SPX", "ACI", "USPS", "IB", "FEDEX", "GOFO", "TOO", "UNIUNI","OC UNIUNI"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
@@ -2164,7 +2162,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
         "GOFO", "FEDEX","TE", "UNI", "OC-UNI","ACI", "DHL", "IB", "SPX",   "YW EXP","USPS",
-        "ATL-GOFO", "ATL-USPS", "ATL-ACI", "ATL-DHL"
+        "ATL-GOFO", "ATL-DHL","ATL-ACI","ATL-USPS"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
