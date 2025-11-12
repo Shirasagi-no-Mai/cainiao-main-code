@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-
+from dateutil import parser
 from urllib3.util.retry import Retry
 from webdriver_manager.chrome import ChromeDriverManager
 import sys
@@ -117,6 +117,854 @@ def update_output_text(output_text, message):
 
 
 # *************************预设*****************************************************************************************
+def creat_node_task(output_text):
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if desktop_path:
+        file_path = os.path.join(desktop_path, "BBCreview.xlsx")
+        if os.path.exists(file_path):
+            update_output_text(output_text, "已找到BBCreview\n")
+            pass
+        else:
+            # 创建空的 Excel 文件
+            update_output_text(output_text, '错误没能找到BBCreview\n')
+            sys.exit()  # 程序立即停止
+    else:
+        sys.exit()  # 程序立即停止
+
+    if desktop_path:
+        file_path = os.path.join(desktop_path, "AGS-Cainiao Daily report.xlsx")
+        if os.path.exists(file_path):
+            update_output_text(output_text, "已找到AGS sheet\n")
+            pass
+        else:
+            # 创建空的 Excel 文件
+            update_output_text(output_text, '错误没能找到AGS sheet\n')
+            sys.exit()  # 程序立即停止
+    else:
+        sys.exit()  # 程序立即停止
+
+    # 检查桌面路径
+    update_output_text(output_text, "开始检查桌面路径...\n")
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+    if not desktop_path:
+        update_output_text(output_text, "错误：无法找到桌面路径\n")
+        sys.exit()
+    update_output_text(output_text, f"找到桌面路径: {desktop_path}\n")
+
+    # 检查并加载 BBCreview.xlsx
+    file_path_bbc = os.path.join(desktop_path, "BBCreview.xlsx")
+    update_output_text(output_text, f"检查 BBCreview.xlsx 是否存在: {file_path_bbc}\n")
+    if not os.path.exists(file_path_bbc):
+        update_output_text(output_text, "错误：未找到 BBCreview.xlsx\n")
+        sys.exit()
+    update_output_text(output_text, "已找到 BBCreview.xlsx\n")
+
+    # 检查并加载 AGS-Cainiao Daily report.xlsx
+    file_path_ags = os.path.join(desktop_path, "AGS-Cainiao Daily report.xlsx")
+    update_output_text(output_text, f"检查 AGS-Cainiao Daily report.xlsx 是否存在: {file_path_ags}\n")
+    if not os.path.exists(file_path_ags):
+        update_output_text(output_text, "错误：未找到 AGS-Cainiao Daily report.xlsx\n")
+        sys.exit()
+    update_output_text(output_text, "已找到 AGS-Cainiao Daily report.xlsx\n")
+
+    # **********************************************
+    update_output_text(output_text, "加载 AGS 文件（确保读取值为非公式）...\n")
+    wb_ags = openpyxl.load_workbook(file_path_ags, data_only=True)
+    ws_ags = wb_ags.active
+    update_output_text(output_text, f"AGS 文件工作表: {ws_ags.title}, 最大行数: {ws_ags.max_row}\n")
+
+    # 保存 AGS 文件（确保公式已转换为值）
+    update_output_text(output_text, "保存 AGS 文件以确保所有单元格为值...\n")
+    wb_ags.save(file_path_ags)
+    update_output_text(output_text, "AGS 文件已保存\n")
+
+    # 加载 BBC 文件
+    update_output_text(output_text, "加载 BBCreview.xlsx...\n")
+    wb_bbc = openpyxl.load_workbook(file_path_bbc)
+    ws_bbc = wb_bbc.active
+    update_output_text(output_text, f"BBC 文件工作表: {ws_bbc.title}, 最大行数: {ws_bbc.max_row}\n")
+
+    # 检查 BBC 是否有表头
+    update_output_text(output_text, "检查 BBC 文件是否有表头（A1 是否为空）...\n")
+    has_header = ws_bbc['A1'].value is not None
+    start_row = 2 if has_header else 1
+    update_output_text(output_text, f"是否有表头: {has_header}, 数据起始行: {start_row}\n")
+
+    # 提取 BBC 第一列数据（跳过表头，去掉空格）
+    update_output_text(output_text, "提取 BBC 第一列数据（跳过表头，去掉空格）...\n")
+    first_column_values = [
+        str(ws_bbc.cell(row=row, column=1).value).replace(" ", "")
+        for row in range(start_row, ws_bbc.max_row + 1)
+        if ws_bbc.cell(row=row, column=1).value is not None
+    ]
+    update_output_text(output_text, f"提取的 BBC 第一列数据: {first_column_values}\n")
+
+    # 定义时间格式的正则表达式
+    update_output_text(output_text, "初始化时间格式正则表达式...\n")
+
+    time_patterns = [
+        re.compile(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$'),  # 2025-10-14 12:31:00
+        re.compile(r'^(?:[A-Z\s]+-\d+/\d+\s+)?[A-Z\s]+-\d+\s+[A-Z0-9\s]+\s+\d{1,2}/\d{1,2}\s+\d{1,2}:\d{2}$'),
+        # UNI-41/42 2P 10/22 22:35
+        re.compile(r'^(?:[A-Z\s]+)?[A-Z\s]+\s+[A-Z0-9\s]+\s+\d{1,2}/\d{1,2}\s+\d{1,2}:\d{2}$'),
+        # SELF PU COE-28 2P 10/22 16:30
+        re.compile(r'^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M$'),  # 10/22/2025 9:35:00 AM
+        re.compile(r'^\d{1,2}/\d{1,2}\s+\d{1,2}:\d{2}$'),  # 10/8 10:11
+    ]
+    update_output_text(output_text, "正则表达式初始化完成\n")
+
+    # ==================== 时间转换函数 ====================
+    def convert_to_standard_time(time_str):
+        update_output_text(output_text, f"尝试转换时间: {time_str}\n")
+        try:
+            # 获取当前日期
+            now = datetime.now()
+            today = now.date()
+
+            # 处理 datetime 对象
+            if isinstance(time_str, datetime):
+                dt = time_str
+                update_output_text(output_text,
+                                   f"datetime 对象直接转换: {time_str} -> {dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            # 确保输入是字符串
+            time_str = str(time_str).strip()
+
+            # 1. 标准格式：2025-10-14 12:31:00
+            if re.match(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$', time_str):
+                dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                update_output_text(output_text,
+                                   f"转换标准时间格式成功: {time_str} -> {dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            # 2. 带 AM/PM 格式：10/22/2025 9:35:00 AM
+            match = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}:\d{2}:\d{2})\s+([AP]M)$', time_str)
+            if match:
+                month, day, year, time_part, ampm = match.groups()
+                dt = datetime.strptime(f"{year}-{month}-{day} {time_part} {ampm}", "%Y-%m-%d %I:%M:%S %p")
+                update_output_text(output_text,
+                                   f"转换 AM/PM 格式成功: {time_str} -> {dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            # 3. 无年份格式：10/8 10:11 或 UNI-41/42 2P 10/22 22:35
+            match = re.search(r'(\d{1,2})/(\d{1,2})\s+(\d{1,2}:\d{2})', time_str)
+            if match:
+                month, day, time_part = match.groups()
+                month, day = int(month), int(day)
+
+                # 尝试当前年份和前一年，选最近的“今天或过去”日期
+                candidates = []
+                for year in [now.year, now.year - 1]:
+                    try:
+                        dt = datetime.strptime(f"{year}/{month}/{day} {time_part}", "%Y/%m/%d %H:%M")
+                        candidates.append(dt)
+                    except ValueError:
+                        continue  # 跳过无效日期（如 2/30）
+
+                if not candidates:
+                    update_output_text(output_text, f"时间 {time_str} 日期无效: {month}/{day}\n")
+                    return None
+
+                # 选择“今天或过去”的最近日期
+                past_or_today = [dt for dt in candidates if dt.date() <= today]
+                if past_or_today:
+                    dt = max(past_or_today, key=lambda x: x.date())  # 最近的过去或今天
+                else:
+                    dt = min(candidates, key=lambda x: (x.date() - today).days)  # 极少数情况选最近未来日期
+
+                update_output_text(output_text,
+                                   f"转换无年份格式成功: {time_str} -> {dt.strftime('%Y-%m-%d %H:%M:%S')} (年份: {dt.year})\n")
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            update_output_text(output_text, f"时间 {time_str} 无法解析\n")
+            return None
+
+        except ValueError as e:
+            update_output_text(output_text, f"时间转换错误: {time_str}, 错误信息: {e}\n")
+            return None
+
+    # ==================== 主逻辑 ====================
+    update_output_text(output_text, "开始处理 BBC 参数...\n")
+    max_row = ws_bbc.max_row
+    for row in range(2, max_row + 1):  # 从第 2 行开始
+        ws_bbc[f'M{row}'] = None
+        ws_bbc[f'N{row}'] = None
+
+    for bbc_row, param in enumerate(first_column_values, start=start_row):
+
+        update_output_text(output_text, f"\n处理 BBC 参数: {param} (BBC 行: {bbc_row})\n")
+
+        # 在 AGS 第三列查找匹配参数
+        update_output_text(output_text, f"在 AGS 第三列查找参数: {param}\n")
+        ags_row = None
+        for row in range(1, ws_ags.max_row + 1):
+            ags_value = str(ws_ags.cell(row=row, column=3).value or "").replace(" ", "")
+            if ags_value == param:
+                ags_row = row
+                break
+        if ags_row is None:
+            update_output_text(output_text, f"参数 {param} 在 AGS 第三列未找到，跳过\n")
+            continue
+        update_output_text(output_text, f"找到匹配: 参数 {param} 在 AGS 第 {ags_row} 行\n")
+
+        # 获取 AGS 的 G, K, L, M, O 列值
+        update_output_text(output_text, f"提取 AGS 第 {ags_row} 行的 G, K, L, M, O 列值...\n")
+        ags_cols = {
+            'G': ws_ags.cell(row=ags_row, column=7).value,
+            'K': ws_ags.cell(row=ags_row, column=11).value,
+            'L': ws_ags.cell(row=ags_row, column=12).value,
+            'M': ws_ags.cell(row=ags_row, column=13).value,
+            'N': ws_ags.cell(row=ags_row, column=14).value,
+            'P': ws_ags.cell(row=ags_row, column=16).value
+        }
+        update_output_text(output_text,
+                           f"AGS 列值: G={ags_cols['G']}, K={ags_cols['K']}, L={ags_cols['L']}, M={ags_cols['M']}, N={ags_cols['N']}, P={ags_cols['P']}\n")
+
+        # 检查是否为时间格式
+        update_output_text(output_text, "检查 AGS 列值是否为时间格式...\n")
+        ags_times = {col: None for col in ags_cols}
+        for col, value in ags_cols.items():
+            if value:  # 检查非空值（包括字符串和 datetime）
+                standard_time = convert_to_standard_time(value)
+                if standard_time:
+                    ags_times[col] = standard_time
+                    update_output_text(output_text, f"列 {col} 包含有效时间: {value} -> 转换后: {standard_time}\n")
+                else:
+                    update_output_text(output_text, f"列 {col} 时间格式不匹配: {value}\n")
+            else:
+                update_output_text(output_text, f"列 {col} 无值: {value}\n")
+        update_output_text(output_text, f"有效时间: {ags_times}\n")
+
+        # 获取 BBC 的 E, F, G, I, J, K 列值
+        update_output_text(output_text, f"提取 BBC 第 {bbc_row} 行的 E, F, G, I, J, K 列值...\n")
+        bbc_values = {
+            'E': ws_bbc.cell(row=bbc_row, column=5).value,
+            'F': ws_bbc.cell(row=bbc_row, column=6).value,
+            'G': ws_bbc.cell(row=bbc_row, column=7).value,
+            'I': ws_bbc.cell(row=bbc_row, column=9).value,
+            'J': ws_bbc.cell(row=bbc_row, column=10).value,
+            'K': ws_bbc.cell(row=bbc_row, column=11).value,
+            'L': ws_bbc.cell(row=bbc_row, column=12).value
+        }
+
+        # 应用规则
+        if bbc_values['E'] == "N" and bbc_values['F'] == "N" and bbc_values['G'] == 0:
+            if ags_times['G']:
+                ws_bbc[f'M{bbc_row}'] = 1
+                ws_bbc[f'N{bbc_row}'] = ags_times['G']
+                update_output_text(output_text, f"写入 BBC L{bbc_row}=1, M{bbc_row}={ags_times['G']} (规则 1)\n")
+                continue
+            else:
+                ws_bbc[f'M{bbc_row}'] = None
+                ws_bbc[f'N{bbc_row}'] = None
+                update_output_text(output_text, f"规则 1 AGS G 未满足，清空 L{bbc_row} 和 M{bbc_row}，跳过本次循环\n")
+                continue
+        else:
+            update_output_text(output_text, f"规则 1 BBC 条件未满足，继续检查下一规则\n")
+
+        if bbc_values['F'] == "N" and bbc_values['G'] == 0:
+            if ags_times['P']:
+                update_output_text(output_text, f"规则 2 匹配: AGS O={ags_times['P']}, BBC F='N', G=0\n")
+                ws_bbc[f'M{bbc_row}'] = 2
+                ws_bbc[f'N{bbc_row}'] = ags_times['P']
+                update_output_text(output_text, f"写入 BBC L{bbc_row}=2, M{bbc_row}={ags_times['P']} (规则 2)\n")
+                continue
+            else:
+                ws_bbc[f'M{bbc_row}'] = None
+                ws_bbc[f'N{bbc_row}'] = None
+                update_output_text(output_text, f"规则 2 AGS O 未满足，清空 L{bbc_row} 和 M{bbc_row}，跳过本次循环\n")
+                continue
+        else:
+            update_output_text(output_text, f"规则 2 BBC 条件未满足，继续检查下一规则\n")
+
+        if bbc_values['I'] == 'No':
+            if ags_times['K']:
+                update_output_text(output_text, f"规则 3 匹配: AGS K={ags_times['K']}, BBC I='No'\n")
+                ws_bbc[f'M{bbc_row}'] = 3
+                ws_bbc[f'N{bbc_row}'] = ags_times['K']
+                update_output_text(output_text, f"写入 BBC L{bbc_row}=3, M{bbc_row}={ags_times['K']} (规则 3)\n")
+                continue
+
+        else:
+            update_output_text(output_text, f"规则 3 BBC 条件未满足，继续检查下一规则\n")
+
+        if bbc_values['J'] == 'No':
+            if ags_times['L']:
+                update_output_text(output_text, f"规则 4 匹配: AGS L={ags_times['L']}, BBC J='No'\n")
+                ws_bbc[f'M{bbc_row}'] = 4
+                ws_bbc[f'N{bbc_row}'] = ags_times['L']
+                update_output_text(output_text, f"写入 BBC L{bbc_row}=4, M{bbc_row}={ags_times['L']} (规则 4)\n")
+                continue
+        else:
+            update_output_text(output_text, f"规则 4 BBC 条件未满足，继续检查下一规则\n")
+
+        if bbc_values['K'] == 'No':
+            if ags_times['M']:
+                update_output_text(output_text, f"规则 5 匹配: AGS M={ags_times['M']}, BBC K='No'\n")
+                ws_bbc[f'M{bbc_row}'] = 5
+                ws_bbc[f'N{bbc_row}'] = ags_times['M']
+                update_output_text(output_text, f"写入 BBC L{bbc_row}=5, M{bbc_row}={ags_times['M']} (规则 5)\n")
+                continue
+        else:
+            update_output_text(output_text, f"规则 4 BBC 条件未满足，继续检查下一规则\n")
+
+        if bbc_values['L'] == 'No':
+            if ags_times['N']:
+                update_output_text(output_text, f"规则 5 匹配: AGS N={ags_times['N']}, BBC L='No'\n")
+                ws_bbc[f'M{bbc_row}'] = 6
+                ws_bbc[f'N{bbc_row}'] = ags_times['N']
+                update_output_text(output_text, f"写入 BBC L{bbc_row}=6, M{bbc_row}={ags_times['N']} (规则 6)\n")
+                continue
+        else:
+            ws_bbc[f'M{bbc_row}'] = "目前无可做节点请检查"
+            ws_bbc[f'N{bbc_row}'] = "目前无可做节点请检查"
+
+        update_output_text(output_text, f"参数 {param} 处理完成\n")
+
+    # 保存 BBC 文件
+    red_fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
+
+    current_time = datetime.now()
+
+    # 遍历 M 列（第13列），从第2行开始
+    for row in ws_bbc.iter_rows(min_row=2, min_col=14, max_col=14):
+        cell = row[0]
+
+        if not cell.value:
+            continue  # 跳过空值
+
+        # 如果是字符串，尝试解析为 datetime
+        if isinstance(cell.value, str):
+            try:
+                cell.value = parser.parse(cell.value.strip())
+            except:
+                continue  # 解析失败，跳过
+
+        # 现在确保是 datetime 类型
+        if not isinstance(cell.value, datetime):
+            continue  # 不是 datetime，跳过
+
+        # 设置时间格式
+        cell.number_format = 'YYYY-MM-DD HH:MM:SS'
+
+        # 判断是否超过 24 小时
+        if cell.value < current_time - timedelta(hours=25):
+            cell.fill = red_fill
+
+    # 保存文件
+    wb_bbc.save(file_path_bbc)
+    update_output_text(output_text, "处理完成，BBCreview.xlsx 已保存\n")
+
+
+
+def node_status(output_text):
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if desktop_path:
+        file_path = os.path.join(desktop_path, "BBCreview.xlsx")
+        if os.path.exists(file_path):
+            update_output_text(output_text, "已找到BBCreview\n")
+            pass
+        else:
+            # 创建空的 Excel 文件
+            wb = Workbook()
+            wb.save(file_path)
+            sys.exit()  # 程序立即停止
+    else:
+        update_output_text(output_text, "未找到正确的桌面路径\n")
+        sys.exit()  # 程序立即停止
+
+    def read_cookies_from_txt():
+        try:
+            txt_file_path = os.path.join(desktop_path, "output.txt")
+            if os.path.exists(txt_file_path):
+                with open(txt_file_path, 'r', encoding='utf-8') as txt_file:
+                    data = json.load(txt_file)
+                    return data.get("cookies", {}), data.get("xsrf_token", None)
+            else:
+                update_output_text(output_text, "未找到output.txt\n")
+                return {}, None
+        except Exception as e:
+            update_output_text(output_text, f"读取文本文件出错: {e}\n")
+            return {}, None
+
+    def get_api_response(awbnum):
+        # 目标 URL
+        url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/queryPage"
+
+        # 获取动态 Cookie 和 XSRF-TOKEN
+        cookies, xsrf_token = read_cookies_from_txt()
+
+        # 验证 XSRF-TOKEN 是否存在
+        if not xsrf_token:
+            update_output_text(output_text, "错误：未找到 XSRF-TOKEN，请确认登录成功\n")
+            return "N/A"
+
+        # 动态构建 headers
+        headers = {
+            "Content-Type": "application/json",
+            "X-Xsrf-Token": xsrf_token,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Origin": "https://os.gcsp.cainiao-inc.com",
+            "Referer": "https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestlist",
+            "Bx-V": "2.5.31",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin"
+        }
+
+        # 动态计算时间（明天前30天到明天）
+        tomorrow = datetime.now() + timedelta(days=1)
+        thirty_days_ago = tomorrow - timedelta(days=30)
+
+        # 格式化时间
+        createTimeBegin = thirty_days_ago.strftime("%d-%m-%Y 00:00:00")
+        createTimeEnd = tomorrow.strftime("%d-%m-%Y 00:00:00")
+        createTimeStr = [
+            thirty_days_ago.strftime("%Y-%m-%dT00:00:00.000Z"),
+            tomorrow.strftime("%Y-%m-%dT00:00:00.000Z")
+        ]
+
+        # 构建 payload
+        payload = {
+            "testMode": "false",
+            "domain": "USA",
+            "gateCode": "All",
+            "linehualCode": awbnum,
+            "createTimeBegin": createTimeBegin,
+            "createTimeEnd": createTimeEnd,
+            "createTimeStr": createTimeStr,
+            "etaTimeBegin": "",
+            "etaTimeEnd": ""
+        }
+
+        try:
+            # 发送 POST 请求
+            response = requests.post(url, headers=headers, cookies=cookies, json=payload)
+            response.raise_for_status()  # 检查请求是否成功
+
+            # 处理响应
+            data = response.json()
+            # 提取 mfCode
+            mf_code = data.get('data', {}).get('tableData', [{}])[0].get('mfCode', 'N/A')
+            if mf_code == 'N/A':
+                update_output_text(output_text, "错误：响应中未找到 mfCode\n")
+            else:
+                update_output_text(output_text, f"请求成功！mfCode：{mf_code}\n")
+            return mf_code
+
+        except requests.RequestException as e:
+            update_output_text(output_text, f"请求失败，错误信息：{e}\n")
+            return "N/A"
+        except ValueError as e:
+            update_output_text(output_text, f"JSON 解析错误：{e}\n")
+            return "N/A"
+        except (KeyError, IndexError) as e:
+            update_output_text(output_text, f"提取 mfCode 失败，数据结构错误：{e}\n")
+            return "N/A"
+
+    def get_post_history(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/log/pageQuery"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "businessCode": mfcode,
+                "businessType": "MANIFEST",
+                "pageNo": 1,
+                "pageSize": 10
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                # print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def query_manifest_detail(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/queryDetail"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "mainOrderCode": mfcode
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                # print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def get_all_amount(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/parcel/queryPage"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "ccStatusCode": "",
+                "mainOrderCode": mfcode,
+                "pageNo": 1,
+                "pageSize": 10
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                # print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def get_qty_history(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/getParcelStatusTotal"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "mainOrderCode": mfcode
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                # print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def inbound_outbound_status(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/log/timeline"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "businessCode": mfcode,
+                "businessType": "MANIFEST"
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def generate_manifest_summary(post_history, qty_history, total_amount, inoutbound_status):
+        # Initialize result list
+        result = []
+
+        # Extract total_count from total_amount
+        try:
+            total_amount_count = total_amount['data']['paging']['totalCount'] if total_amount and isinstance(
+                total_amount, dict) else "N/A"
+        except (KeyError, TypeError):
+            total_amount_count = "N/A"
+        result.append(total_amount_count)
+
+        # Check INBOUND status in inoutbound_status
+        try:
+            inbound_status = next((item['status'] for item in inoutbound_status['data'] if item['name'] == 'INBOUND'),
+                                  'wait') if inoutbound_status and isinstance(inoutbound_status, dict) else "wait"
+            inbound_count = 'Y' if inbound_status == 'finish' else 'N'
+        except (KeyError, TypeError, StopIteration):
+            inbound_count = 'N'
+        result.append(inbound_count)
+
+        # Check OUTBOUND status in inoutbound_status
+        try:
+            outbound_status = next((item['status'] for item in inoutbound_status['data'] if item['name'] == 'OUTBOUND'),
+                                   'wait') if inoutbound_status and isinstance(inoutbound_status, dict) else "wait"
+            outbound_count = 'Y' if outbound_status == 'finish' else 'N'
+        except (KeyError, TypeError, StopIteration):
+            outbound_count = 'N'
+        result.append(outbound_count)
+
+        # Extract counts from qty_history for specific statuses
+        try:
+            handover_count = next((item['count'] for item in qty_history['data'] if item['status'] == 'HANDOVER'),
+                                  0) if qty_history and isinstance(qty_history, dict) else "N/A"
+        except (KeyError, TypeError, StopIteration):
+            handover_count = "N/A"
+        result.append(handover_count)
+
+        try:
+            cc_release_count = next((item['count'] for item in qty_history['data'] if item['status'] == 'CC_RELEASE'),
+                                    0) if qty_history and isinstance(qty_history, dict) else "N/A"
+        except (KeyError, TypeError, StopIteration):
+            cc_release_count = "N/A"
+        result.append(cc_release_count)
+
+        # Check for specific delivery resources in post_history
+        try:
+            uniuni_present = any('UNIUNI末端配送' in item['content'] for item in
+                                 post_history['data']['tableData']) if post_history and isinstance(post_history,
+                                                                                                   dict) else False
+            result.append('Yes' if uniuni_present else 'No')
+        except (KeyError, TypeError):
+            result.append('N/A')
+
+        try:
+            us_standard_present = any('美国统包标准配送资源' in item['content'] for item in
+                                      post_history['data']['tableData']) if post_history and isinstance(post_history,
+                                                                                                        dict) else False
+            result.append('Yes' if us_standard_present else 'No')
+        except (KeyError, TypeError):
+            result.append('N/A')
+
+        try:
+            usps_present = any('美国USPS直连末端配送' in item['content'] for item in
+                               post_history['data']['tableData']) if post_history and isinstance(post_history,
+                                                                                                 dict) else False
+            result.append('Yes' if usps_present else 'No')
+        except (KeyError, TypeError):
+            result.append('N/A')
+        try:
+            usps_present = any('MAERSK-末端配送' in item['content'] for item in
+                               post_history['data']['tableData']) if post_history and isinstance(post_history,
+                                                                                                 dict) else False
+            result.append('Yes' if usps_present else 'No')
+        except (KeyError, TypeError):
+            result.append('N/A')
+
+        return result
+
+    def main_function():
+        # 加载 Excel 文件
+        try:
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+
+            # 检查第一行是否已有表头（以 A1 是否有值或是否为 '原始awb' 为例）
+            has_header = ws['A1'].value is not None  # 简单判断：如果 A1 不为空，假设有表头
+
+            # 如果没有表头，插入新行并添加表头
+            if not has_header:
+                ws.insert_rows(1)
+                ws['A1'] = '原始awb'
+                ws['C1'] = 'awb'
+                ws['D1'] = '总数量'
+                ws['E1'] = '入库状态'
+                ws['F1'] = '出库状态'
+                ws['G1'] = '派送数量'
+                ws['H1'] = '放行数量'
+                ws['I1'] = 'uni'
+                ws['J1'] = 'coe'
+                ws['K1'] = 'usps'
+                ws['L1'] = 'Maersk'
+                ws['M1'] = '任务类型'
+                ws['N1'] = '任务时间    '
+
+            # 提取第一列数据（跳过表头）
+            first_column_values = [ws.cell(row=row, column=1).value for row in range(2, ws.max_row + 1) if
+                                   ws.cell(row=row, column=1).value is not None]
+
+            # 处理每个 AWB 并写入结果
+            for idx, awb in enumerate(first_column_values, start=2):  # 从第 2 行开始
+                mfcode = get_api_response(awb)
+                post_history = get_post_history(mfcode)
+                qty_history = get_qty_history(mfcode)
+                total_amount = get_all_amount(mfcode)
+                inoutbound_status = inbound_outbound_status(mfcode)
+                final_list = generate_manifest_summary(post_history, qty_history, total_amount, inoutbound_status)
+
+                # 写入结果到 C 列到 K 列
+                ws[f'C{idx}'] = awb  # 写入 AWB 到 C 列
+                ws[f'B{idx}'] = mfcode
+                for col_idx, value in enumerate(final_list, start=4):  # 从 D 列（第 4 列）开始
+                    ws[f'{get_column_letter(col_idx)}{idx}'] = value
+
+                update_output_text(output_text, f'{awb} 运行完成\n')
+
+            # 保存修改后的工作簿
+            wb.save(file_path)
+            update_output_text(output_text, "文件处理完成并保存\n")
+
+        except FileNotFoundError:
+            update_output_text(output_text, f"错误：文件 {file_path} 不存在！\n")
+        except Exception as e:
+            update_output_text(output_text, f"发生错误：{e}\n")
+
+    # 调用函数
+    main_function()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def node_token(account, password, output_text):
     user_home = os.path.expanduser("~")
     possible_paths = [
@@ -204,8 +1052,25 @@ def node_token(account, password, output_text):
     login_button = driver.find_element(By.XPATH,
                                        "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button")
     login_button.click()
-    WebDriverWait(driver, 10).until(EC.title_contains("Manifest"))  # 等待页面标题更新为登录后的内容
-    print("Current page title is:", driver.title)
+    update_output_text(output_text, "登录成功，等待标题变化中\n\n")
+
+    initial_title = driver.title
+    initial_url = driver.current_url
+
+    update_output_text(output_text, f"Current page title: {driver.title}")
+
+    def page_changed(t, u):
+        def _pred(d): return d.title != t or d.current_url != u
+
+        return _pred
+
+    try:
+        WebDriverWait(driver, 50).until(page_changed(initial_title, initial_url))
+        update_output_text(output_text, f"Current page title is: {driver.title}")
+    except Exception as e:
+        update_output_text(output_text, f"登录失败或超时: {str(e)}")
+        raise
+    update_output_text(output_text, "检测到标题变化，即将获取token\n\n")
 
     def get_cookies_from_driver(driver):
         try:
@@ -2831,7 +3696,12 @@ def start_program(account, password, output_text, task_type, mode=None):
     if task_type == "实报实销ord":
         # 保持原有调用，不改动此处
         wipe_off_ord(account, password, output_text, 101, 20)
-
+    if task_type == "创建节点任务":
+        # 保持原有调用，不改动此处
+        creat_node_task(output_text)
+    if task_type == "节点状态获取":
+        # 保持原有调用，不改动此处
+        node_status(output_text)
     # 登录界面
 
 
@@ -2906,7 +3776,9 @@ def show_main_window(account, password):
                   ("email下载 ord", lambda: switch_to_task("email下载 ord")),
                   ("梦想成真模拟器", lambda: switch_to_task("梦想成真模拟器")),
                   ("实报实销lax", lambda: switch_to_task("实报实销lax")),
-                  ("实报实销ord", lambda: switch_to_task("实报实销ord"))
+                  ("实报实销ord", lambda: switch_to_task("实报实销ord")),
+                  ("节点状态获取", lambda: switch_to_task("节点状态获取")),
+                  ("创建节点任务", lambda: switch_to_task("创建节点任务"))
               ] + [("未解锁功能", None)] * 8  # 增加点按钮以便显示滚动效果
 
     def create_button(parent, text, command=None):
@@ -3116,7 +3988,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("不想上班")
+root.title("节点功能added")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
