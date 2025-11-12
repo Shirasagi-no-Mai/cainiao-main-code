@@ -43,7 +43,6 @@ from selenium.common.exceptions import (
     TimeoutException
 )
 
-
 # *************************通过个人网页更新过期日期*************************************************************************
 CONFIG_URL = "https://raw.githubusercontent.com/Shirasagi-no-Mai/my-exe-control/main/expiration_config.json"
 
@@ -111,6 +110,7 @@ print(json.dumps(permissions, indent=2, ensure_ascii=False))
 # 更新输出文本框
 windowname = ""
 
+
 def update_output_text(output_text, message):
     output_text.insert(tk.END, message)
     output_text.yview(tk.END)
@@ -118,7 +118,6 @@ def update_output_text(output_text, message):
 
 # *************************预设*****************************************************************************************
 def node_token(account, password, output_text):
-
     user_home = os.path.expanduser("~")
     possible_paths = [
         os.path.join(user_home, "Desktop"),
@@ -142,7 +141,6 @@ def node_token(account, password, output_text):
             sys.exit()  # 程序立即停止
     else:
         sys.exit()  # 程序立即停止
-
 
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--start-maximized")  # 启动时最大化
@@ -517,11 +515,9 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
                 txt_file.seek(0)  # 必须重置指针！read() 后指针在末尾
                 data = json.load(txt_file)
 
-
                 # 7. 提取 cookies 和 xsrf_token
                 cookies = data.get("cookies", {})
                 xsrf_token = data.get("xsrf_token", None)
-
 
                 return cookies, xsrf_token
 
@@ -529,11 +525,10 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
             update_output_text(output_text, f"JSON 解析失败！错误: {je}\n\n")
             update_output_text(output_text, f"错误位置: line {je.lineno}, column {je.colno}\n\n")
 
-
             return {}, None
 
         except Exception as e:
-            update_output_text(output_text,  f"{type(e).__name__}: {e}")
+            update_output_text(output_text, f"{type(e).__name__}: {e}")
             return {}, None
 
         # finally:
@@ -617,7 +612,7 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
                 return None
 
         except Exception as e:
-            update_output_text(output_text,  f"请求异常: {str(e)}\n")
+            update_output_text(output_text, f"请求异常: {str(e)}\n")
 
             return None
 
@@ -689,7 +684,6 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
 
         finally:
             print("=== 读取结束 ===\n")
-
 
     def get_mail_content(email_id):
         """
@@ -876,14 +870,13 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
                 "NUMBER OF CTN": info.get("NUMBER OF CTN", "N/A"),
                 "美国统包标准配送资源_number_of_ctn": info["美国统包标准配送资源"].get("number of ctn", "N/A"),
                 "美国统包标准配送资源_quantity_of_parcels": info["美国统包标准配送资源"].get("quantity of parcels",
-                                                                                                 "N/A"),
+                                                                                             "N/A"),
             }
             results.append(flat_info)
             processed_count += 1
             update_output_text(output_text, f"已处理 {processed_count} 个邮件\n")
         else:
             continue
-
 
     # ========= 表头（第1行）=========
     headers = [
@@ -910,6 +903,8 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
         return
     update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
+
+
 def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
     possible_paths = [
@@ -1163,23 +1158,25 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "COE/UP", "DHLe", "SPX", "ACI", "USPS", "IB", "FEDEX", "GOFO", "TOO", "UNIUNI","OC UNIUNI"
+        "GOFO", "TE",  # ← 只保留 TE
+        "UNI", "OC-UNI", "DHL", "IB", "SPX", "ACI", "FEDEX", "USPS",
+        "ATL-GOFO", "ATL-USPS", "ATL-ACI", "ATL-DHL"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
         "GOFO": "GOFO",
-        "DHL":"DHLe",
+        "TOOEXPRESS": "TE",
+        "TOOEXPRESS-DF": "TE",  # ← 改为映射到 TE
+        "UNIUNI": "UNI",
+        "OC-UNI": "OC-UNI",
+        "DHL": "DHL",
+        "IB": "IB",
         "SPX": "SPX",
         "ACI": "ACI",
-        "USPS-GA": "USPS",
-        "IB": "IB",
         "FEDEX GROUND": "FEDEX",
-        "TOOEXPRESS": "TOO",
-        "UNIUNI": "UNIUNI",
-        "OC-UNI": "OC-UNIUNI",
+        "USPS-GA": "USPS",
         "COE": "COE/UP",
     }
-
 
     # **************************************************************************************************************************
     def extract_flight_info(response_dict):
@@ -1278,8 +1275,6 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
                             print(f"[主表解析] QUANTITY OF PARCELS='{result['QUANTITY OF PARCELS']}'")
                         except Exception:
                             pass
-
-
 
         # === 4. 提取渠道 CTN：按行首单元格匹配渠道，第二列为 CTN ===
         unmatched_cells = []
@@ -1411,6 +1406,8 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
         return
     update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
+
+
 def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
     possible_paths = [
@@ -1664,12 +1661,12 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "COE/UP", "SPX","USPS","DHLe", "ACI"
+        "COE/UP", "SPX", "USPS", "DHLe", "ACI"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
         "GOFO": "GOFO",
-        "DHL":"DHLe",
+        "DHL": "DHLe",
         "SPX": "SPX",
         "ACI": "ACI",
         "USPS-GA": "USPS",
@@ -1680,7 +1677,6 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
         "OC-UNI": "OC-UNIUNI",
         "COE": "COE/UP",
     }
-
 
     # **************************************************************************************************************************
     def extract_flight_info(response_dict):
@@ -1779,8 +1775,6 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
                             print(f"[主表解析] QUANTITY OF PARCELS='{result['QUANTITY OF PARCELS']}'")
                         except Exception:
                             pass
-
-
 
         # === 4. 提取渠道 CTN：按行首单元格匹配渠道，第二列为 CTN ===
         unmatched_cells = []
@@ -1892,8 +1886,8 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
     # ========= 表头（第1行）=========
     # 最终表头（按你给定的顺序与命名）
     header_fixed = [
-        "MAWB", "口岸", "月份", "ETA","weight", "CTN", "PARCELS",
-        "COE weight", "SPX weight", "usps weight","DHL weight", "ACI weight"
+        "MAWB", "口岸", "月份", "ETA", "weight", "CTN", "PARCELS",
+        "COE weight", "SPX weight", "usps weight", "DHL weight", "ACI weight"
     ]
 
     header_channels = []
@@ -1914,6 +1908,7 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
         return
     update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
+
 
 def email_program_chicago(account, password, output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
@@ -2168,12 +2163,13 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "GOFO", "TE", "TE-DF", "UNI", "OC-UNI", "DHL", "IB", "SPX", "ACI", "FEDEX", "USPS",
+        "GOFO", "FEDEX","TE", "UNI", "OC-UNI","ACI", "DHL", "IB", "SPX",   "YW EXP","USPS",
         "ATL-GOFO", "ATL-USPS", "ATL-ACI", "ATL-DHL"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
         "GOFO": "GOFO",
+        "YW EXPRESS":"YW EXP",
         "TOOEXPRESS": "TE",
         "TOOEXPRESS-DF": "TE-DF",
         "UNIUNI": "UNI",
@@ -2192,6 +2188,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
         "ATL-ACI": "ATL-ACI",
         "ATL-DHL": "ATL-DHL",
     }
+
     # **************************************************************************************************************************
     def extract_flight_info(response_dict):
         """
@@ -2446,7 +2443,6 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
                     num_match = num_re.search(ctn_cell.replace(',', ''))
                     new_value_str = num_match.group(0) if num_match else (ctn_cell if ctn_cell else "N/A")
 
-                    # （下面的 to_int、覆盖逻辑保持原样）
                     def to_int(s):
                         try:
                             s_clean = str(s).replace(',', '').strip()
@@ -2461,17 +2457,26 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
                     old_n = to_int(old_value_str)
                     new_n = to_int(new_value_str)
 
+                    # === 合并 TE 和 TE-DF ===
+                    if std == "TE-DF":
+                        # 转为 TE 并累加
+                        std = "TE"  # 强制映射为 TE
+                        old_value_str = result.get("TE", "N/A")
+                        old_n = to_int(old_value_str)
+
+                    # === 正常合并逻辑 ===
                     chosen_str = old_value_str
                     if old_n is None and new_n is not None:
                         chosen_str = str(new_n)
                     elif old_n is not None and new_n is None:
                         chosen_str = str(old_n)
                     elif old_n is not None and new_n is not None:
-                        chosen_str = str(max(old_n, new_n))
+                        chosen_str = str(old_n + new_n)  # 关键：相加！
                     else:
                         if str(old_value_str).upper() == "N/A" and str(new_value_str).strip():
                             chosen_str = new_value_str
 
+                    # 最终写入合并后的 TE（TE-DF 已消失）
                     result[std] = chosen_str
 
                     try:
@@ -2488,6 +2493,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
         # 把未匹配的单元格内容放进结果（后面写 Excel 时取）
         result["未识别渠道"] = " | ".join(unmatched_cells) if unmatched_cells else "N/A"
         return result
+
     raw_query = get_mail_list()
     email_id_list = extract_mail_ids(raw_query)
     results = []
@@ -2535,15 +2541,15 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
             update_output_text(output_text, f"已处理 {processed_count} 个邮件\n")
         else:
             continue
-    
 
     # ========= 表头（第1行）=========
     # 最终表头（按你给定的顺序与命名）
     header_fixed = ["未识别渠道",
-        "MAWB #", "FLIGHT #", "PMC", "ETA", "PICKUP","WEIGHT (KG)", "CTNS","PARCELS","PMC #",  "INBOUND 2020", "CUSTOMS RELEASE", "HOLD",
-           "COE (Parcels/CTNS)",
-          # 新增：放在 COE 之后，渠道之前
-    ]
+                    "MAWB #", "FLIGHT #", "PMC", "ETA", "PICKUP", "WEIGHT (KG)", "CTNS", "PARCELS", "PMC #",
+                    "INBOUND 2020", "CUSTOMS RELEASE", "HOLD",
+                    "COE (Parcels/CTNS)",
+                    # 新增：放在 COE 之后，渠道之前
+                    ]
     header_keys = header_fixed + channel_order
 
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
@@ -2799,7 +2805,6 @@ def FDA_program(account, password, output_text):
     wb.close()
 
 
-
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
@@ -2898,7 +2903,7 @@ def show_main_window(account, password):
 
                   ("itac检测", lambda: switch_to_task("itac检测")),
                   ("获取节点身份信息", lambda: switch_to_task("获取节点身份信息")),
-                  ("获取email身份信息",lambda: switch_to_task("获取email身份信息")),
+                  ("获取email身份信息", lambda: switch_to_task("获取email身份信息")),
                   ("email下载", lambda: switch_to_task("email下载")),
                   ("email下载 ord", lambda: switch_to_task("email下载 ord")),
                   ("梦想成真模拟器", lambda: switch_to_task("梦想成真模拟器")),
@@ -2941,13 +2946,13 @@ def show_task_window(account, password, task_type):
         border_width=2, border_color="#007acc"
     )
     # 非 email下载 模式，日志框按原位置显示；email下载模式下稍后再排版，保证返回按钮可见
-    if task_type != "email下载" and task_type != "email下载 ord" and task_type != "实报实销lax"and task_type != "实报实销ord":
+    if task_type != "email下载" and task_type != "email下载 ord" and task_type != "实报实销lax" and task_type != "实报实销ord":
         output_text.pack(pady=10)
 
     # 在 email下载 与 email下载 ord 模式下显示两个数字输入框
     folder_id_entry = None
     limit_entry = None
-    if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax"or task_type == "实报实销ord":
+    if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax" or task_type == "实报实销ord":
         label_folder = ctk.CTkLabel(task_frame, text="文件夹ID", text_color="#FFFFFF")
         label_folder.pack(pady=(5, 0))
         folder_id_entry = ctk.CTkEntry(task_frame, width=200, height=35)
@@ -2959,7 +2964,6 @@ def show_task_window(account, password, task_type):
         limit_entry = ctk.CTkEntry(task_frame, width=200, height=35)
         limit_entry.insert(0, "20")
         limit_entry.pack(pady=5)
-
 
     if task_type == "梦想成真模拟器":
         output_text.destroy()
@@ -3043,7 +3047,7 @@ def show_task_window(account, password, task_type):
     def start_task():
         output_text.insert("end", f"启动 {task_type} 任务...\n")
         # 在 email 下载模式下，读取输入并调用对应函数；否则调用通用 start_program
-        if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax"or task_type == "实报实销ord":
+        if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax" or task_type == "实报实销ord":
             try:
                 folder_id_val = int(folder_id_entry.get()) if folder_id_entry else 101
                 limit_val = int(limit_entry.get()) if limit_entry else 20
@@ -3060,8 +3064,6 @@ def show_task_window(account, password, task_type):
             elif task_type == "实报实销ord":
                 target_func = wipe_off_ord
 
-
-
             threading.Thread(
                 target=target_func,
                 args=(account, password, output_text, folder_id_val, limit_val),
@@ -3073,12 +3075,14 @@ def show_task_window(account, password, task_type):
                 args=(account, password, output_text, task_type),
                 daemon=True
             ).start()
-    if task_type == "email下载" or task_type == "email下载 ord"or task_type == "实报实销lax"or task_type == "实报实销ord":
+
+    if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax" or task_type == "实报实销ord":
         # 将“开始任务”和“返回”并排放到输入框下方，整洁且始终可见
         btn_row = ctk.CTkFrame(task_frame, fg_color="transparent")
         btn_row.pack(pady=6)
 
-        start_button = ctk.CTkButton(btn_row, text="开始任务", command=start_task, width=120, height=36, corner_radius=10)
+        start_button = ctk.CTkButton(btn_row, text="开始任务", command=start_task, width=120, height=36,
+                                     corner_radius=10)
         start_button.pack(side="left", padx=6)
 
         back_button = ctk.CTkButton(
