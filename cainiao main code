@@ -5,6 +5,7 @@ import uuid
 import os
 import re
 import subprocess
+import glob
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -3432,6 +3433,159 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
         return
     update_output_text(output_text, f"所有邮件处理完成，共 {processed_count} 封。返回代码结束。\n")
 
+def tax_compare_broker(output_text):
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if desktop_path:
+        file_path = os.path.join(desktop_path, "taxcheck.xlsx")
+        if os.path.exists(file_path):
+            print("taxcheck\n")
+            pass
+        else:
+            # 创建空的文本文件
+            with open(file_path, 'w', encoding='utf-8'):
+                pass
+            sys.exit()  # 程序立即停止
+    else:
+        sys.exit()  # 程序立
+
+    if desktop_path:
+        folder_path = os.path.join(desktop_path, "taxcheck")
+        if os.path.exists(folder_path):
+            print("taxcheck\n")
+            pass
+        else:
+            # Create an empty folder
+            os.makedirs(folder_path, exist_ok=True)
+            sys.exit()  # Program stops immediately
+    else:
+        sys.exit()  # Program stops immediately
+    # 即停止
+
+    try:
+        df = pd.read_excel(file_path, header=None)  # 无标题行
+    except Exception as e:
+        print(f"读取 Excel 文件失败: {e}")
+        sys.exit()
+
+    # 确保 A 列有数据
+    if df.empty or df[0].isna().all():
+        print("A 列无数据！")
+        sys.exit()
+
+    try:
+        print("Step 7: 尝试读取 taxcheck.xlsx")
+        df = pd.read_excel(file_path, header=None)  # 无标题行
+        print("Step 8: 成功读取 taxcheck.xlsx")
+    except Exception as e:
+        print(f"Step 7: 读取 Excel 文件失败: {e}，程序退出")
+        sys.exit()
+
+    # 检查 A 列是否有数据
+    if df.empty or df[0].isna().all():
+        print("Step 9: A 列无数据！程序退出")
+        sys.exit()
+    else:
+        print(f"Step 9: A 列包含 {len(df)} 行数据")
+
+    df[4] = "N/A"  # E 列
+    df[5] = "N/A"  # F 列
+    df[6] = "N/A"  # G 列
+    print("Step 10: 已初始化 E, F, G 列为 N/A")
+
+    # 获取 taxcheck 文件夹中的所有 .xls 和 .csv 文件
+    xls_files = glob.glob(os.path.join(folder_path, "*.xls")) + glob.glob(os.path.join(folder_path, "*.csv"))
+    print(f"Step 11: 找到 {len(xls_files)} 个 .xls/.csv 文件: {xls_files}")
+
+    # 迭代 A 列的每个单号
+    for index, order in df[0].items():
+        print(f"\nStep 12: 处理行 {index + 1}，单号: {order}")
+        if pd.isna(order):
+            print(f"Step 13: 行 {index + 1} 单号为空，跳过")
+            continue  # 跳过空值
+        try:
+            # 提取单号中 - 后面的数字
+            order_str = str(order).strip()  # 去除前后空格
+            number = order_str.split("-")[1] if "-" in order_str else None
+            if not number:
+                print(f"Step 14: 行 {index + 1} 单号 {order} 格式无效，跳过")
+                continue
+            number = number.strip()  # 去除提取数字的空格
+            print(f"Step 14: 提取单号中的数字: {number}")
+
+            # 查找匹配的 .xls 或 .csv 文件
+            matched_file = None
+            print(f"Step 15: 搜索文件名包含 '{number}' 的文件")
+            for xls_file in xls_files:
+                file_basename = os.path.basename(xls_file)
+                print(f"Step 15.1: 检查文件: {file_basename}")
+                if number in file_basename:
+                    matched_file = xls_file
+                    print(f"Step 15.2: 找到匹配文件: {matched_file}")
+                    break
+            if not matched_file:
+                print(f"Step 15.3: 未找到包含数字 {number} 的文件，写入 N/A")
+                df.at[index, 4] = number
+                continue
+
+            # 读取匹配的 Excel/CSV 文件
+            try:
+                print(f"Step 16: 尝试读取匹配文件: {matched_file}")
+                if matched_file.endswith(".csv"):
+                    target_df = pd.read_csv(matched_file)
+                else:
+                    target_df = pd.read_excel(matched_file)
+                print(f"Step 17: 成功读取文件，行数: {len(target_df)}")
+                if target_df.empty:
+                    print(f"Step 18: 文件为空，写入 N/A")
+                    df.at[index, 4] = number
+                    continue
+
+                # 检查 Duty 和 User Fee 列是否存在
+                if "Duty" not in target_df.columns or "User Fee" not in target_df.columns:
+                    print(f"Step 18: 文件缺少 'Duty' 或 'User Fee' 列，写入 N/A")
+                    df.at[index, 4] = number
+                    continue
+
+                # 计算 Duty 和 User Fee 列的和（从第二行开始）
+                print(f"Step 18: 计算 'Duty' 列和 'User Fee' 列的和，从第二行开始")
+                sum_duty = pd.to_numeric(target_df["Duty"], errors="coerce").sum()  # Duty 列，从第二行开始
+                sum_user_fee = pd.to_numeric(target_df["User Fee"], errors="coerce").sum()  # User Fee 列，从第二行开始
+                print(f"Step 19: Duty 列和: {sum_duty}, User Fee 列和: {sum_user_fee}")
+
+                # 写入结果到 E, F, G 列
+                df.at[index, 4] = number  # E 列：单号中 - 后的数字
+                df.at[index, 5] = sum_duty if not pd.isna(sum_duty) else "N/A"  # F 列：Duty 列和
+                df.at[index, 6] = sum_user_fee if not pd.isna(sum_user_fee) else "N/A"  # G 列：User Fee 列和
+                print(f"Step 20: 写入结果到行 {index + 1} - E: {number}, F: {sum_duty}, G: {sum_user_fee}")
+            except Exception as e:
+                print(f"Step 16: 处理文件 {matched_file} 时出错: {e}，写入 N/A")
+                df.at[index, 4] = number
+                df.at[index, 5] = "N/A"
+                df.at[index, 6] = "N/A"
+        except Exception as e:
+            print(f"Step 14: 处理单号 {order} 时出错: {e}，写入 N/A")
+            df.at[index, 4] = "N/A"
+            df.at[index, 5] = "N/A"
+            df.at[index, 6] = "N/A"
+
+    # 保存修改后的 Excel 文件
+    try:
+        print("Step 21: 尝试保存修改后的 taxcheck.xlsx")
+        df.to_excel(file_path, index=False, header=None)
+        print("Step 22: 处理完成，结果已保存到 taxcheck.xlsx")
+    except Exception as e:
+        print(f"Step 21: 保存 Excel 文件失败: {e}")
+
+
 
 def FDA_program(account, password, output_text):
     expiration_date = expiration_date1
@@ -3706,6 +3860,8 @@ def start_program(account, password, output_text, task_type, mode=None):
     if task_type == "节点状态获取":
         # 保持原有调用，不改动此处
         node_status(output_text)
+    if task_type == "批次关税核对":
+        tax_compare_broker(output_text)
     # 登录界面
 
 
@@ -3782,7 +3938,9 @@ def show_main_window(account, password):
                   ("实报实销lax", lambda: switch_to_task("实报实销lax")),
                   ("实报实销ord", lambda: switch_to_task("实报实销ord")),
                   ("节点状态获取", lambda: switch_to_task("节点状态获取")),
-                  ("创建节点任务", lambda: switch_to_task("创建节点任务"))
+                  ("创建节点任务", lambda: switch_to_task("创建节点任务")),
+                  ("批次关税核对", lambda: switch_to_task("批次关税核对"))
+
               ] + [("未解锁功能", None)] * 8  # 增加点按钮以便显示滚动效果
 
     def create_button(parent, text, command=None):
