@@ -2535,22 +2535,31 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "COE/UP", "SPX", "USPS", "DHLe", "ACI"
+        "COE/UP","GOFO","TE", "UNI","DHL","IB","SPX", "ACI",  "FEDEX","USPS","YW EXP", "ATL-GOFO", "ATL-DHL","ATL-ACI","ATL-USPS"
     ]
+
+
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
         "GOFO": "GOFO",
-        "DHL": "DHLe",
+        "YW EXPRESS":"YW EXP",
+        "TOOEXPRESS": "TE",
+        "TOOEXPRESS-DF": "TE-DF",
+        "UNIUNI": "UNI",
+        "OC-UNI": "OC-UNI",
+        "DHL": "DHL",
+        "IB": "IB",
         "SPX": "SPX",
         "ACI": "ACI",
-        "USPS-GA": "USPS",
-        "IB": "IB",
         "FEDEX GROUND": "FEDEX",
-        "TOOEXPRESS": "TOO",
-        "UNIUNI": "UNIUNI",
-        "OC-UNI": "OC-UNIUNI",
+        "USPS-GA": "USPS",
         "COE": "COE/UP",
+        "ATL-GOFO": "ATL-GOFO",
+        "ATL-USPS": "ATL-USPS",
+        "ATL-ACI": "ATL-ACI",
+        "ATL-DHL": "ATL-DHL",
     }
+
 
     # **************************************************************************************************************************
     def extract_flight_info(response_dict):
@@ -2772,7 +2781,11 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
 
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
     df = pd.DataFrame(results, columns=header_keys)
-
+    for col in df.columns:
+        if col == "USPS_CTN":
+            df[col] = df[col].apply(lambda x: "N/A" if x == "N/A" else -(-float(x) // 10))  # 除10向上取整
+        elif col.endswith("_CTN"):
+            df[col] = df[col].apply(lambda x: "N/A" if x == "N/A" else -(-float(x) // 20))  # 除20向上取整
 
     update_output_text(output_text, "正在写入 Excel...\n")
     try:
