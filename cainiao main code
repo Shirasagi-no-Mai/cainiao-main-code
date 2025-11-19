@@ -4,6 +4,7 @@ import json
 import uuid
 import os
 import re
+import math
 import subprocess
 import glob
 from selenium.webdriver.chrome.service import Service
@@ -1434,7 +1435,7 @@ def email_program(account, password, output_text, folder_id_param, limit_param):
             "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
             "showFrom": "1",
             "offset": "0",
-            "length": "50",  # 每页数量
+            "length": "100",  # 每页数量
             "_tpl_": "v5ForWebDing",
             "_refer_hash_": "",
             "_root_token_": "",
@@ -1872,7 +1873,7 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
             "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
             "showFrom": "1",
             "offset": "0",
-            "length": "50",  # 每页数量
+            "length": "100",  # 每页数量
             "_tpl_": "v5ForWebDing",
             "_refer_hash_": "",
             "_root_token_": "",
@@ -2262,6 +2263,13 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
     df = pd.DataFrame(results, columns=header_keys)
 
+    for col in df.columns:
+        if col == "USPS_CTN":
+            df[col] = df[col].apply(lambda x: "N/A" if x == "N/A" else -(-float(x) // 10))  # 除10向上取整
+        elif col.endswith("_CTN"):
+            df[col] = df[col].apply(lambda x: "N/A" if x == "N/A" else -(-float(x) // 20))  # 除20向上取整
+
+
     update_output_text(output_text, "正在写入 Excel...\n")
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
@@ -2374,7 +2382,7 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
             "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
             "showFrom": "1",
             "offset": "0",
-            "length": "50",  # 每页数量
+            "length": "100",  # 每页数量
             "_tpl_": "v5ForWebDing",
             "_refer_hash_": "",
             "_root_token_": "",
@@ -2765,6 +2773,7 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
     df = pd.DataFrame(results, columns=header_keys)
 
+
     update_output_text(output_text, "正在写入 Excel...\n")
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
@@ -2877,7 +2886,7 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
             "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
             "showFrom": "1",
             "offset": "0",
-            "length": "50",  # 每页数量
+            "length": "100",  # 每页数量
             "_tpl_": "v5ForWebDing",
             "_refer_hash_": "",
             "_root_token_": "",
@@ -3581,7 +3590,6 @@ def tax_compare_broker(output_text):
     try:
         update_output_text(output_text, "Step 21: 尝试保存修改后的 taxcheck.xlsx\n")
         df.to_excel(file_path, index=False, header=None)
-        writer.close()
         update_output_text(output_text, "Step 22: 处理完成，结果已保存到 taxcheck.xlsx\n")
     except Exception as e:
         update_output_text(output_text, f"Step 21: 保存 Excel 文件失败: {e}\n")
