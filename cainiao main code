@@ -468,7 +468,7 @@ def creat_node_task(output_text):
         cell.number_format = 'YYYY-MM-DD HH:MM:SS'
 
         # 判断是否超过 24 小时
-        if cell.value < current_time - timedelta(hours=25):
+        if cell.value < current_time - timedelta(hours=23):
             cell.fill = red_fill
 
     # 保存文件
