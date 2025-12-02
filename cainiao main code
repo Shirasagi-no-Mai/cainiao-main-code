@@ -728,6 +728,7 @@ def daily_report(output_text):
         result.append(total_amount_count)
 
         # 2. 提取派送数量 (HANDOVER count)
+        # 注意：qty_history 中状态码通常是准确且固定的，这里保持只匹配 'HANDOVER'
         try:
             handover_count = next((item['count'] for item in qty_history['data'] if item['status'] == 'HANDOVER'),
                                   0) if qty_history and isinstance(qty_history, dict) else "N/A"
@@ -743,14 +744,13 @@ def daily_report(output_text):
             cc_release_count = "N/A"
         result.append(cc_release_count)
 
-        # 4. 提取最新的 HANDOVER 时间并格式化
+        # 4. 提取最新的包含 'HANDOVER' 的时间并格式化
         handover_time_str = "N/A"
         try:
             # post_history.get('data', {}).get('tableData', []) 默认按时间倒序排列 (最新的在前面)
-            # 寻找第一个 'HANDOVER' code 的条目
-            handover_entry = next(
-                (item for item in post_history.get('data', {}).get('tableData', []) if item.get('code') == 'HANDOVER'),
-                None)
+            # 寻找第一个 'code' 包含 'HANDOVER' 字符串的条目
+            handover_entry = next((item for item in post_history.get('data', {}).get('tableData', [])
+                                   if 'HANDOVER' in item.get('code', '')), None)
 
             if handover_entry:
                 # 使用 operateTime 字段（毫秒时间戳）
@@ -759,6 +759,8 @@ def daily_report(output_text):
                     # 毫秒转秒
                     operate_time_s = operate_time_ms / 1000
                     # 转换为 datetime 对象
+                    # 注意：如果时间戳已经是当地时间，可能不需要进一步调整时区。
+                    # 考虑到 API 返回的数据结构和实际应用，假设它是 UTC 或已经处理过的时区，直接转换为本地时间。
                     dt_object = datetime.fromtimestamp(operate_time_s)
                     # 格式化为 'YYYY/MM/DD HH:MM:SS'
                     handover_time_str = dt_object.strftime('%Y/%m/%d %H:%M:%S')
@@ -4532,7 +4534,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("daily report 功能已添加")
+root.title("MAC 已兼容")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
