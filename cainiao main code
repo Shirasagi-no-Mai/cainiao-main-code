@@ -468,12 +468,371 @@ def creat_node_task(output_text):
         cell.number_format = 'YYYY-MM-DD HH:MM:SS'
 
         # 判断是否超过 24 小时
-        if cell.value < current_time - timedelta(hours=23):
+        if cell.value < current_time - timedelta(hours=25):
             cell.fill = red_fill
 
     # 保存文件
     wb_bbc.save(file_path_bbc)
     update_output_text(output_text, "处理完成，BBCreview.xlsx 已保存\n")
+
+def daily_report(output_text):
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if desktop_path:
+        file_path = os.path.join(desktop_path, "dailyreport.xlsx")
+        if os.path.exists(file_path):
+            update_output_text(output_text, "已找到所需的excel\n")
+            pass
+        else:
+            # 创建空的 Excel 文件
+            update_output_text(output_text, "未找到所需的excel已创建，请再次点击开始\n")
+
+            wb = Workbook()
+            wb.save(file_path)
+            sys.exit()  # 程序立即停止
+    else:
+        update_output_text(output_text, "未找到正确的桌面路径\n")
+        sys.exit()  # 程序立即停止
+
+    def read_cookies_from_txt():
+        try:
+            txt_file_path = os.path.join(desktop_path, "output.txt")
+            if os.path.exists(txt_file_path):
+                with open(txt_file_path, 'r', encoding='utf-8') as txt_file:
+                    data = json.load(txt_file)
+                    return data.get("cookies", {}), data.get("xsrf_token", None)
+            else:
+                update_output_text(output_text, "未找到output.txt\n")
+                return {}, None
+        except Exception as e:
+            update_output_text(output_text, f"读取文本文件出错: {e}\n")
+            return {}, None
+
+    def get_api_response(awbnum):
+        # 目标 URL
+        url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/queryPage"
+
+        # 获取动态 Cookie 和 XSRF-TOKEN
+        cookies, xsrf_token = read_cookies_from_txt()
+
+        # 验证 XSRF-TOKEN 是否存在
+        if not xsrf_token:
+            update_output_text(output_text, "错误：未找到 XSRF-TOKEN，请确认登录成功\n")
+            return "N/A"
+
+        # 动态构建 headers
+        headers = {
+            "Content-Type": "application/json",
+            "X-Xsrf-Token": xsrf_token,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Origin": "https://os.gcsp.cainiao-inc.com",
+            "Referer": "https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestlist",
+            "Bx-V": "2.5.31",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin"
+        }
+
+        # 动态计算时间（明天前30天到明天）
+        tomorrow = datetime.now() + timedelta(days=1)
+        thirty_days_ago = tomorrow - timedelta(days=30)
+
+        # 格式化时间
+        createTimeBegin = thirty_days_ago.strftime("%d-%m-%Y 00:00:00")
+        createTimeEnd = tomorrow.strftime("%d-%m-%Y 00:00:00")
+        createTimeStr = [
+            thirty_days_ago.strftime("%Y-%m-%dT00:00:00.000Z"),
+            tomorrow.strftime("%Y-%m-%dT00:00:00.000Z")
+        ]
+
+        # 构建 payload
+        payload = {
+            "testMode": "false",
+            "domain": "USA",
+            "gateCode": "All",
+            "linehualCode": awbnum,
+            "createTimeBegin": createTimeBegin,
+            "createTimeEnd": createTimeEnd,
+            "createTimeStr": createTimeStr,
+            "etaTimeBegin": "",
+            "etaTimeEnd": ""
+        }
+
+        try:
+            # 发送 POST 请求
+            response = requests.post(url, headers=headers, cookies=cookies, json=payload)
+            response.raise_for_status()  # 检查请求是否成功
+
+            # 处理响应
+            data = response.json()
+            # 提取 mfCode
+            mf_code = data.get('data', {}).get('tableData', [{}])[0].get('mfCode', 'N/A')
+            if mf_code == 'N/A':
+                update_output_text(output_text, "错误：响应中未找到 mfCode\n")
+            else:
+                update_output_text(output_text, f"请求成功！mfCode：{mf_code}\n")
+            return mf_code
+
+        except requests.RequestException as e:
+            update_output_text(output_text, f"请求失败，错误信息：{e}\n")
+            return "N/A"
+        except ValueError as e:
+            update_output_text(output_text, f"JSON 解析错误：{e}\n")
+            return "N/A"
+        except (KeyError, IndexError) as e:
+            update_output_text(output_text, f"提取 mfCode 失败，数据结构错误：{e}\n")
+            return "N/A"
+
+    def get_post_history(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/log/pageQuery"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "businessCode": mfcode,
+                "businessType": "MANIFEST",
+                "pageNo": 1,
+                "pageSize": 10
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+
+    def get_all_amount(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/parcel/queryPage"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "ccStatusCode": "",
+                "mainOrderCode": mfcode,
+                "pageNo": 1,
+                "pageSize": 10
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                # print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def get_qty_history(mfcode):
+        if mfcode == "N/A":
+            return "N/A"
+        else:
+            cookies_dict, xsrf_token = read_cookies_from_txt()
+            url = "https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/manifest/getParcelStatusTotal"
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+                "Content-Type": "application/json",
+                "Origin": "https://os.gcsp.cainiao-inc.com",
+                "Priority": "u=1, i",
+                "Referer": f"https://os.gcsp.cainiao-inc.com/USA/manifestlist/manifestdetail?mainOrderCode={mfcode}",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "X-Xsrf-Token": xsrf_token,
+                "x-csrf-token": xsrf_token
+            }
+            payload = {
+                "testMode": "false",
+                "domain": "USA",
+                "gateCode": "All",
+                "mainOrderCode": mfcode
+            }
+            response = requests.post(url, headers=headers, cookies=cookies_dict, json=payload)
+            if response.status_code == 200:
+                # print(response.json())  # 已注释
+                return response.json()
+            else:
+                raise Exception(f"Request failed with status {response.status_code}: {response.text}")
+
+    def generate_manifest_summary(post_history, qty_history, total_amount):
+        # Initialize result list
+        result = []
+
+        # 1. 提取总数量 (total_count)
+        try:
+            total_amount_count = total_amount['data']['paging']['totalCount'] if total_amount and isinstance(
+                total_amount, dict) else "N/A"
+        except (KeyError, TypeError):
+            total_amount_count = "N/A"
+        result.append(total_amount_count)
+
+        # 2. 提取派送数量 (HANDOVER count)
+        try:
+            handover_count = next((item['count'] for item in qty_history['data'] if item['status'] == 'HANDOVER'),
+                                  0) if qty_history and isinstance(qty_history, dict) else "N/A"
+        except (KeyError, TypeError, StopIteration):
+            handover_count = "N/A"
+        result.append(handover_count)
+
+        # 3. 提取放行数量 (CC_RELEASE count)
+        try:
+            cc_release_count = next((item['count'] for item in qty_history['data'] if item['status'] == 'CC_RELEASE'),
+                                    0) if qty_history and isinstance(qty_history, dict) else "N/A"
+        except (KeyError, TypeError, StopIteration):
+            cc_release_count = "N/A"
+        result.append(cc_release_count)
+
+        # 4. 提取最新的 HANDOVER 时间并格式化
+        handover_time_str = "N/A"
+        try:
+            # post_history.get('data', {}).get('tableData', []) 默认按时间倒序排列 (最新的在前面)
+            # 寻找第一个 'HANDOVER' code 的条目
+            handover_entry = next(
+                (item for item in post_history.get('data', {}).get('tableData', []) if item.get('code') == 'HANDOVER'),
+                None)
+
+            if handover_entry:
+                # 使用 operateTime 字段（毫秒时间戳）
+                operate_time_ms = handover_entry.get('operateTime')
+                if operate_time_ms:
+                    # 毫秒转秒
+                    operate_time_s = operate_time_ms / 1000
+                    # 转换为 datetime 对象
+                    dt_object = datetime.fromtimestamp(operate_time_s)
+                    # 格式化为 'YYYY/MM/DD HH:MM:SS'
+                    handover_time_str = dt_object.strftime('%Y/%m/%d %H:%M:%S')
+
+        except Exception:
+            handover_time_str = "N/A"
+
+        result.append(handover_time_str)
+
+        return result
+
+    def main_function():
+        # 加载 Excel 文件
+        try:
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+
+            # 检查第一行是否已有表头（以 A1 是否有值或是否为 '原始awb' 为例）
+            has_header = ws['A1'].value is not None  # 简单判断：如果 A1 不为空，假设有表头
+
+            # 如果没有表头，插入新行并添加新的表头
+            if not has_header:
+                ws.insert_rows(1)
+                ws['A1'] = '原始awb'
+                ws['B1'] = 'MFCODE'  # 调整为 B1
+                ws['C1'] = 'awb'  # 调整为 C1
+                ws['D1'] = '总数量'
+                ws['E1'] = '派送数量'
+                ws['F1'] = '放行数量'
+                ws['G1'] = '最新HANDOVER时间'  # 新增的列
+
+            # 提取第一列数据（跳过表头）
+            first_column_values = [ws.cell(row=row, column=1).value for row in range(2, ws.max_row + 1) if
+                                   ws.cell(row=row, column=1).value is not None]
+
+            # 处理每个 AWB 并写入结果
+            for idx, awb in enumerate(first_column_values, start=2):  # 从第 2 行开始
+                mfcode = get_api_response(awb)
+                # 只需要 post_history, qty_history, total_amount
+                post_history = get_post_history(mfcode)
+                qty_history = get_qty_history(mfcode)
+                total_amount = get_all_amount(mfcode)
+                # 移除 inoutbound_status 的调用，因为 generate_manifest_summary 不再使用它
+
+                # 调整 generate_manifest_summary 的调用参数
+                final_list = generate_manifest_summary(post_history, qty_history, total_amount)
+
+                # 写入 MFCODE 到 B 列
+                ws[f'B{idx}'] = mfcode
+                # 写入 AWB 到 C 列
+                ws[f'C{idx}'] = awb
+
+                # 写入结果到 D 列开始
+                # final_list 包含：[总数量, 派送数量, 放行数量, 最新HANDOVER时间]
+                # 它们对应 Excel 的 D, E, F, G 列
+                for col_idx, value in enumerate(final_list, start=4):  # 从 D 列（第 4 列）开始
+                    ws[f'{get_column_letter(col_idx)}{idx}'] = value
+
+                update_output_text(output_text, f'{awb} 运行完成\n')
+
+            # 保存修改后的工作簿
+            wb.save(file_path)
+            update_output_text(output_text, "文件处理完成并保存\n")
+
+        except FileNotFoundError:
+            update_output_text(output_text, f"错误：文件 {file_path} 不存在！\n")
+        except Exception as e:
+            update_output_text(output_text, f"发生错误：{e}\n")
+
+    main_function()
+
+
+
+
 
 
 
@@ -2381,7 +2740,7 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
         payload = {
             "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',  # 由第一个参数决定
             "showFrom": "1",
-            "offset": "0",
+            "offset": "100",
             "length": "100",  # 每页数量
             "_tpl_": "v5ForWebDing",
             "_refer_hash_": "",
@@ -3883,6 +4242,8 @@ def start_program(account, password, output_text, task_type, mode=None):
         node_status(output_text)
     if task_type == "批次关税核对":
         tax_compare_broker(output_text)
+    if task_type == "daily report":
+        daily_report(output_text)
     # 登录界面
 
 
@@ -3960,8 +4321,8 @@ def show_main_window(account, password):
                   ("实报实销ord", lambda: switch_to_task("实报实销ord")),
                   ("节点状态获取", lambda: switch_to_task("节点状态获取")),
                   ("创建节点任务", lambda: switch_to_task("创建节点任务")),
-                  ("批次关税核对", lambda: switch_to_task("批次关税核对"))
-
+                  ("批次关税核对", lambda: switch_to_task("批次关税核对")),
+                  ("daily report", lambda: switch_to_task("daily report"))
               ] + [("未解锁功能", None)] * 8  # 增加点按钮以便显示滚动效果
 
     def create_button(parent, text, command=None):
@@ -4171,7 +4532,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("MAC 已兼容")
+root.title("daily report 功能已添加")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
