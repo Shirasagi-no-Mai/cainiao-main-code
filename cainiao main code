@@ -1358,10 +1358,9 @@ def node_token(account, password, output_text):
     chrome_options.add_argument("--disable-gpu")  # 解决某些系统的图形渲染问题
     chrome_options.add_argument("--no-sandbox")  # 非root用户需要此参数
     chrome_options.add_argument("--disable-dev-shm-usage")  # 避免某些共享内存问题
-    chrome_options.add_argument("--always-on-top")  # 窗口置顶 (实验性参数)
-    chrome_options.add_argument("--force-device-scale-factor=0.5")  # 设置缩放比例为50%
 
-    # 启动 Chrome 浏览器并加载已保存的用户数据
+
+    # 启动 Chrome 浏览器
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     driver.set_window_size(1920, 1080)
 
@@ -1497,10 +1496,9 @@ def email_token(account, password, output_text):
     chrome_options.add_argument("--disable-gpu")  # 解决某些系统的图形渲染问题
     chrome_options.add_argument("--no-sandbox")  # 非root用户需要此参数
     chrome_options.add_argument("--disable-dev-shm-usage")  # 避免某些共享内存问题
-    chrome_options.add_argument("--always-on-top")  # 窗口置顶 (实验性参数)
-    chrome_options.add_argument("--force-device-scale-factor=0.5")  # 设置缩放比例为50%
 
-    # 启动 Chrome 浏览器并加载已保存的用户数据
+
+    # 启动 Chrome 浏览器
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     driver.set_window_size(1920, 1080)
 
