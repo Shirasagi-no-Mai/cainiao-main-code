@@ -2385,7 +2385,7 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
 
     # 统一渠道顺序与别名映射（定义一次，全局复用）
     channel_order = [
-        "COE/UP", "DHLe", "SPX", "ACI", "USPS", "IB", "FEDEX", "GOFO", "TOO", "UNIUNI","OC UNIUNI"
+        "COE/UP", "DHLe", "SPX", "ACI", "USPS", "IB", "FEDEX", "GOFO", "TOO", "UNIUNI","OC UNIUNI","YW EXP"
     ]
     # 使用“规范化键”：全部小写、去空格与连字符，提升匹配鲁棒性
     exact_match_to_std = {
@@ -2401,6 +2401,7 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
         "FEDEX GROUND": "FEDEX",
         "USPS-GA": "USPS",
         "COE": "COE/UP",
+        "YW EXPRESS": "YW EXP",
     }
 
     # **************************************************************************************************************************
