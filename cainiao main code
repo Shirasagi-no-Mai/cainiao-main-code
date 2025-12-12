@@ -436,8 +436,8 @@ def creat_node_task(output_text):
                 update_output_text(output_text, f"写入 BBC L{bbc_row}=6, M{bbc_row}={ags_times['N']} (规则 6)\n")
                 continue
         else:
-            ws_bbc[f'M{bbc_row}'] = "目前无可做节点请检查"
-            ws_bbc[f'N{bbc_row}'] = "目前无可做节点请检查"
+            ws_bbc[f'M{bbc_row}'] = None
+            ws_bbc[f'N{bbc_row}'] = None
 
         update_output_text(output_text, f"参数 {param} 处理完成\n")
 
