@@ -436,8 +436,8 @@ def creat_node_task(output_text):
                 update_output_text(output_text, f"写入 BBC L{bbc_row}=6, M{bbc_row}={ags_times['N']} (规则 6)\n")
                 continue
         else:
-            ws_bbc[f'M{bbc_row}'] = None
-            ws_bbc[f'N{bbc_row}'] = None
+            ws_bbc[f'M{bbc_row}'] = "目前无可做节点请检查"
+            ws_bbc[f'N{bbc_row}'] = "目前无可做节点请检查"
 
         update_output_text(output_text, f"参数 {param} 处理完成\n")
 
@@ -1566,7 +1566,251 @@ def node_status(output_text):
     main_function()
 
 
+def wipe_off_AE(account, password,output_text, folder_id_param, limit_param):
 
+
+    DISTRIBUTORS = {
+        "MAERSK-末端配送": "MAERSK-末端配送_Gross_Weight",
+        "美国统包标准配送资源": "美国统包标准配送资源_Gross_Weight",
+        "美国USPS直连末端配送": "美国USPS直连末端配送_Gross_Weight",
+        "SpeedX配送": "SpeedX配送_Gross_Weight"
+    }
+    MAIL_LIST_LIMIT_PER_QUERY = 100  # API 每次获取邮件列表的上限
+
+    # -------------------- 路径和文件检查 --------------------
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if not desktop_path:
+        update_output_text(output_text,"未找到正确的桌面路径\n\n")
+        return
+
+    file_path = os.path.join(desktop_path, "实报实销AE.xlsx")
+
+    if not os.path.exists(file_path):
+        # 创建空的文本文件
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                pass
+            update_output_text(output_text,f"未找到用于输出的excel文件，已生成 {output_text}，请再次运行代码\n\n")
+        except IOError as e:
+            update_output_text(output_text,f"创建文件失败: {e}\n\n")
+        return
+    else:
+        update_output_text(output_text,"已找到用于输出的excel文件，即将继续代码\n\n")
+
+    # -------------------- 内部函数定义 (需要访问 desktop_path, DISTRIBUTORS 等外部变量) --------------------
+
+    def read_cookies_from_txt():
+        """从桌面文件读取 Cookies 和 XSRF Token"""
+        txt_file_path = os.path.join(desktop_path, "emailtoken.txt")
+        if not os.path.exists(txt_file_path):
+            update_output_text(output_text,"未找到储存身份信息的文件，请重新运行邮件身份信息程序\n\n")
+            return {}, None
+        try:
+            with open(txt_file_path, 'r', encoding='utf-8') as txt_file:
+                data = json.load(txt_file)
+                return data.get("cookies", {}), data.get("xsrf_token", None)
+        except (json.JSONDecodeError, Exception) as e:
+            update_output_text(output_text,"读取身份信息文件出错: {type(e).__name__}: {e}\n\n")
+            return {}, None
+
+    def get_mail_list(showFrom, cookies_dict, xsrf_token):
+        """获取邮件列表（只用于提取 mailId），showFrom 是动态偏移量"""
+        if not cookies_dict or not xsrf_token:
+            return []
+
+        url = "https://mail.alibaba-inc.com/alimail/ajax/mail/queryMailList.txt"
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": f"https://mail.alibaba-inc.com/alimail/entries/v5.1/mail/folder-{str(folder_id_param)}/all",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        payload = {
+            "query": f'{{"folderIds":["{str(folder_id_param)}"]}}',
+            "showFrom": "1",
+            "offset": str(showFrom),
+            "length": str(MAIL_LIST_LIMIT_PER_QUERY),
+            "_tpl_": "v5ForWebDing",
+            "_csrf_token_": xsrf_token
+        }
+
+        session = requests.Session()
+        session.cookies.update(cookies_dict)
+
+        try:
+            update_output_text(output_text,f"正在获取邮件列表 (偏移量: {showFrom})...\n")
+            response = session.post(url=url, headers=headers, data=payload, timeout=15, verify=False)
+            response.raise_for_status()
+
+            text = response.text
+            if text.startswith("/**/"):
+                match = re.search(r'\((.*)\)', text, re.DOTALL)
+                text = match.group(1) if match else text
+
+            result = json.loads(text)
+            data_list = result.get("dataList", [])
+            update_output_text(output_text,f"成功获取 {len(data_list)} 封邮件\n\n")
+            return data_list
+        except Exception as e:
+            update_output_text(output_text,f"请求邮件列表异常: {e}\n\n")
+            return []
+
+    def get_mail_content(email_id, cookies_dict, xsrf_token):
+        """获取单封邮件的详细内容"""
+        if not cookies_dict or not xsrf_token:
+            return None
+
+        url = "https://mail.alibaba-inc.com/alimail/ajax/mail/loadMail.txt"
+        payload = {
+            "mailId": email_id,
+            "full": "1",
+            "_tpl_": "v5ForWebDing",
+            "_csrf_token_": xsrf_token
+        }
+
+        ref_payload = {"id": email_id, "type": "mail", "isDraftMail": False}
+        ref_b64 = base64.b64encode(json.dumps(ref_payload).encode('utf-8')).decode('utf-8')
+        referer = f"https://mail.alibaba-inc.com/alimail/entries/v5.1/mail/folder-{folder_id_param}/all/{ref_b64}"
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": referer,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        }
+
+        session = requests.Session()
+        session.cookies.update(cookies_dict)
+
+        try:
+            response = session.post(url=url, data=payload, headers=headers, timeout=15, verify=False)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            update_output_text(output_text,f"请求邮件内容失败: {e}\n\n")
+            return None
+
+    def extract_flight_info(response_dict):
+        """从 loadMail.txt 的 response 中提取 MAWB 和指定分销商的 Gross Weight。"""
+        try:
+            html_body = response_dict["data"]["body"]
+        except (KeyError, TypeError):
+            update_output_text(output_text,"response 结构错误，缺少 data.body\n")
+            return {}
+
+        soup = BeautifulSoup(html_body, "html.parser")
+        num_re = re.compile(r'[\d,]+\.?\d*')
+
+        result = {"MAWB": "", **{col_name: "" for col_name in DISTRIBUTORS.values()}}
+
+        # 提取 MAWB
+        main_table = soup.find("table", align="center")
+        if main_table:
+            for row in main_table.find_all("tr"):
+                tds = row.find_all("td")
+                if len(tds) == 2 and "MAWB No." in tds[0].get_text(strip=True):
+                    result["MAWB"] = tds[1].get_text(strip=True)
+                    break
+
+        # 提取分销商重量信息
+        for table in soup.find_all("table", align="center"):
+            header_td = table.find("td", class_="distributorName")
+            if not header_td:
+                continue
+
+            distributor_name = header_td.get_text(strip=True)
+
+            if distributor_name in DISTRIBUTORS:
+                column_name = DISTRIBUTORS[distributor_name]
+                for row in table.find_all("tr"):
+                    tds = row.find_all("td")
+                    if len(tds) == 2 and "Gross Weight" in tds[0].get_text(strip=True):
+                        raw_value = tds[1].get_text(strip=True)
+                        num_match = num_re.search(raw_value.replace(',', ''))
+                        weight_value = num_match.group(0) if num_match else raw_value.replace('KG', '').strip()
+                        result[column_name] = weight_value
+                        break
+        return result
+
+    # -------------------- 主逻辑执行 --------------------
+
+    cookies_dict, xsrf_token = read_cookies_from_txt()
+    if not cookies_dict or not xsrf_token:
+        update_output_text(output_text,"身份信息读取失败，程序终止。\n\n")
+        return
+
+    all_results = []
+    processed_count = 0
+
+    # 根据 limit_param 计算需要查询的总次数
+    num_queries = (limit_param + MAIL_LIST_LIMIT_PER_QUERY - 1) // MAIL_LIST_LIMIT_PER_QUERY
+
+    for i in range(num_queries):
+        show_from_offset = i * MAIL_LIST_LIMIT_PER_QUERY
+
+        if show_from_offset >= limit_param:
+            break
+
+        mail_data_list = get_mail_list(show_from_offset, cookies_dict, xsrf_token)
+        email_id_list_batch = [mail.get("mailId") for mail in mail_data_list if mail.get("mailId")]
+
+        # 批量处理邮件内容
+        for email_id in email_id_list_batch:
+            if processed_count >= limit_param:
+                break
+
+            update_output_text(output_text,f"正在处理邮件: {email_id[:10]}... (总数: {processed_count + 1} / {limit_param})\n")
+            result = get_mail_content(email_id, cookies_dict, xsrf_token)
+
+            if result and result.get("status") in [0, 6]:
+                info = extract_flight_info(result)
+
+                flat_info = {
+                    "MAWB": info.get("MAWB", ""),
+                    **{k: info.get(k, "") for k in DISTRIBUTORS.values()}
+                }
+                all_results.append(flat_info)
+                processed_count += 1
+            else:
+                update_output_text(output_text,f"处理邮件 {email_id[:10]}... 失败，跳过\n\n")
+                continue
+
+        if processed_count >= limit_param:
+            break
+
+    # ========= 写入 Excel：默认覆盖模式 =========
+
+    headers = ["MAWB", *list(DISTRIBUTORS.values())]
+
+    df = pd.DataFrame(all_results, columns=headers)
+
+    update_output_text(output_text,f"\n正在写入 Excel 文件: {output_text}...\n")
+    try:
+        with pd.ExcelWriter(
+                file_path,
+                engine='openpyxl',
+                mode='w'
+        ) as writer:
+            df.to_excel(
+                writer,
+                sheet_name='实报实销AE',
+                index=False,
+                startrow=0,
+                header=True
+            )
+
+        update_output_text(output_text,f"写入完成，文件位于：{file_path}\n\n")
+    except Exception as e:
+        update_output_text(output_text,f"写入 Excel 失败: {e}\n\n")
+
+    update_output_text(output_text,f"所有邮件处理完成，共 {processed_count} 封。程序结束。\n\n")
 
 
 
@@ -1969,7 +2213,7 @@ def email_token(account, password, output_text):
     sys.exit()
 
 
-def email_program(account, password, output_text, folder_id_param, limit_param):
+def email_program(output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
     possible_paths = [
         os.path.join(user_home, "Desktop"),
@@ -5691,6 +5935,10 @@ def start_program(account, password, output_text, task_type, mode=None):
     if task_type == "实报实销lax":
         # 保持原有调用，不改动此处
         wipe_off_lax(account, password, output_text, 101, 20)  # 应该使用传入的参数
+    if task_type == "实报实销AE测试":
+        # 保持原有调用，不改动此处
+        wipe_off_AE(account, password,output_text, 101, 20)  # 应该使用传入的参数
+
     if task_type == "实报实销ord":
         # 保持原有调用，不改动此处
         wipe_off_ord(account, password, output_text, 101, 20)  # 应该使用传入的参数
@@ -5780,6 +6028,8 @@ def show_main_window(account, password):
                   ("EMAIL-MIA-AE", lambda: switch_to_task("EMAIL-MIA-AE")),  # 新增
                   ("email下载", lambda: switch_to_task("email下载")),
                   ("email下载 ord", lambda: switch_to_task("email下载 ord")),
+                  ("实报实销AE测试", lambda: switch_to_task("实报实销AE测试")),
+
                   ("梦想成真模拟器", lambda: switch_to_task("梦想成真模拟器")),
                   ("实报实销lax", lambda: switch_to_task("实报实销lax")),
                   ("实报实销ord", lambda: switch_to_task("实报实销ord")),
@@ -5825,13 +6075,13 @@ def show_task_window(account, password, task_type):
         border_width=2, border_color="#007acc"
     )
     # 非 email下载 模式，日志框按原位置显示；email下载模式下稍后再排版，保证返回按钮可见
-    if task_type != "email下载" and task_type != "email下载 ord" and task_type != "实报实销lax" and task_type != "实报实销ord" and task_type != "EMAIL-MIA-4px" and task_type != "EMAIL-MIA-AE":
+    if task_type != "email下载" and task_type != "email下载 ord" and task_type != "实报实销lax" and task_type != "实报实销ord" and task_type != "EMAIL-MIA-4px" and task_type != "EMAIL-MIA-AE" and task_type != "实报实销AE测试":
         output_text.pack(pady=10)
 
     # 在 email下载 与 email下载 ord 模式下显示两个数字输入框
     folder_id_entry = None
     limit_entry = None
-    if task_type in ["email下载", "email下载 ord", "实报实销lax", "实报实销ord", "EMAIL-MIA-4px", "EMAIL-MIA-AE"]:
+    if task_type in ["email下载", "email下载 ord", "实报实销lax", "实报实销ord", "EMAIL-MIA-4px", "EMAIL-MIA-AE","实报实销AE测试"]:
         label_folder = ctk.CTkLabel(task_frame, text="文件夹ID", text_color="#FFFFFF")
         label_folder.pack(pady=(5, 0))
         folder_id_entry = ctk.CTkEntry(task_frame, width=200, height=35)
@@ -5926,7 +6176,7 @@ def show_task_window(account, password, task_type):
     def start_task():
         output_text.insert("end", f"启动 {task_type} 任务...\n")
         # 统一需要输入参数的任务列表
-        task_with_params = ["email下载", "email下载 ord", "实报实销lax", "实报实销ord", "EMAIL-MIA-4px", "EMAIL-MIA-AE"]
+        task_with_params = ["email下载", "email下载 ord", "实报实销lax", "实报实销ord", "EMAIL-MIA-4px", "EMAIL-MIA-AE", "实报实销AE测试"]
 
         if task_type in task_with_params:
             try:
@@ -5941,6 +6191,7 @@ def show_task_window(account, password, task_type):
                 "email下载": email_program,
                 "email下载 ord": email_program_chicago,
                 "实报实销lax": wipe_off_lax,
+                "实报实销AE测试": wipe_off_AE,
                 "实报实销ord": wipe_off_ord,
                 "EMAIL-MIA-4px": email_program_mia_4px,  # 新增
                 "EMAIL-MIA-AE": email_program_mia_AE,  # 新增
@@ -5960,7 +6211,7 @@ def show_task_window(account, password, task_type):
                 daemon=True
             ).start()
 
-    if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax" or task_type == "实报实销ord" or task_type =="EMAIL-MIA-4px"or task_type == "EMAIL-MIA-AE":
+    if task_type == "email下载" or task_type == "email下载 ord" or task_type == "实报实销lax" or task_type == "实报实销ord" or task_type =="EMAIL-MIA-4px"or task_type == "EMAIL-MIA-AE" or task_type == "实报实销AE测试" :
         # 将“开始任务”和“返回”并排放到输入框下方，整洁且始终可见
         btn_row = ctk.CTkFrame(task_frame, fg_color="transparent")
         btn_row.pack(pady=6)
