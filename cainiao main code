@@ -2213,7 +2213,7 @@ def email_token(account, password, output_text):
     sys.exit()
 
 
-def email_program(output_text, folder_id_param, limit_param):
+def email_program(account, password,output_text, folder_id_param, limit_param):
     user_home = os.path.expanduser("~")
     possible_paths = [
         os.path.join(user_home, "Desktop"),
@@ -2646,7 +2646,6 @@ def email_program(output_text, folder_id_param, limit_param):
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-            writer.close()
         update_output_text(output_text, f"写入完成，文件：{file_path}\n")
     except Exception as e:
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
@@ -3115,7 +3114,6 @@ def email_program_mia_AE(account, password, output_text, folder_id_param, limit_
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-            writer.close()
         update_output_text(output_text, f"写入完成，文件：{file_path}\n")
     except Exception as e:
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
@@ -3821,7 +3819,6 @@ def email_program_mia_4px(account, password, output_text, folder_id_param, limit
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-            writer.close()
         update_output_text(output_text, f"写入完成，文件：{file_path}\n")
     except Exception as e:
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
@@ -4333,7 +4330,6 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-            writer.close()
         update_output_text(output_text, f"写入完成，文件：{file_path}\n")
     except Exception as e:
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
@@ -4850,7 +4846,6 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-            writer.close()
         update_output_text(output_text, f"写入完成，文件：{file_path}\n")
     except Exception as e:
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
@@ -5507,7 +5502,6 @@ def email_program_chicago(account, password, output_text, folder_id_param, limit
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='预报数据', index=False, startrow=0, header=True)
-            writer.close()
         update_output_text(output_text, f"写入完成，文件：{file_path}\n")
     except Exception as e:
         update_output_text(output_text, f"写入 Excel 失败: {e}\n")
@@ -6253,7 +6247,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("代码测试中")
+root.title("代码维护中")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
