@@ -3840,7 +3840,7 @@ def wipe_off_lax(account, password, output_text, folder_id_param, limit_param):
     desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
 
     if desktop_path:
-        file_path = os.path.join(desktop_path, "getemailord.xlsx")
+        file_path = os.path.join(desktop_path, "实报实销lax.xlsx")
         if os.path.exists(file_path):
             update_output_text(output_text, "已找到用于输出的excel文件，即将继续\n")
             pass
