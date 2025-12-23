@@ -601,7 +601,9 @@ def daily_report(output_text):
 
         # 时间统计
         in_t, out_t, han_t = "N/A", "N/A", "N/A"
+
         if post_history and 'data' in post_history:
+            print(post_history)
             logs = post_history.get('data', {}).get('tableData', [])
             for log in logs:
                 code = log.get('code', '')
@@ -609,7 +611,7 @@ def daily_report(output_text):
                 if code == 'INBOUND' and in_t == "N/A": in_t = format_ts(ts)
                 if code == 'OUTBOUND' and out_t == "N/A": out_t = format_ts(ts)
                 # 修改点：必须是 PARTIAL_HANDOVER
-                if code == 'PARTIAL_HANDOVER' and han_t == "N/A": han_t = format_ts(ts)
+                if (code == 'PARTIAL_HANDOVER' or code=='HANDOVER' )and han_t == "N/A": han_t = format_ts(ts)
 
         return [total_count, h_qty, c_qty, in_t, out_t, han_t]
 
