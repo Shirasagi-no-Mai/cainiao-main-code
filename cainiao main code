@@ -4657,7 +4657,7 @@ def wipe_off_ord(account, password, output_text, folder_id_param, limit_param):
                 "COE weight": info.get("COE/UP_WEIGHT", "N/A"),
                 "SPX weight": info.get("SPX_WEIGHT", "N/A"),
                 "usps weight": info.get("USPS_WEIGHT", "N/A"),
-                "DHL weight": info.get("DHLe_WEIGHT", "N/A"),
+                "DHL weight": info.get("DHL_WEIGHT", "N/A"),
                 "ACI weight": info.get("ACI_WEIGHT", "N/A"),
 
             }
@@ -6105,7 +6105,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("代码维护中")
+root.title("ORD bug 修复测试中")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
