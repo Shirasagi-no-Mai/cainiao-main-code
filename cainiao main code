@@ -2884,44 +2884,67 @@ def email_program_mia_AE(account, password, output_text, folder_id_param, limit_
                     pass  # 如果不是数字，跳过
 
             # 最终的展平数据结构（与 Excel 表头对应）
+            val_up = distributors_info["美国统包标准配送资源"].get("number of ctn", "N/A")
+            val_usps = distributors_info["美国USPS直连末端配送"].get("number of ctn", "N/A")
+
+            val_uni = distributors_info["UNIUNI末端配送"].get("number of ctn", "N/A")
+            val_speedx = distributors_info["SpeedX配送"].get("number of ctn", "N/A")
+            val_maersk = distributors_info["MAERSK-末端配送"].get("number of ctn", "N/A")
+
+            def check_na(val):
+                s = str(val).strip().upper()
+                # 如果值是 "N/A"、"0"（代表提取失败/无数据）或为空，则返回 "-"
+                if s == "N/A" or s == "0" or s == "":
+                    return "-"
+                return ""
+
+            # 3. 最终的展平数据结构
             flat_info = {
                 "MAWB": info.get("MAWB", "N/A"),
-                "UP": distributors_info["美国统包标准配送资源"].get("number of ctn", "N/A"),  # 假设 'UP' 对应 UNIUNI末端配送
-                "USPS": distributors_info["美国USPS直连末端配送"].get("number of ctn", "N/A"),
-                "UNIUNI": distributors_info["UNIUNI末端配送"].get("number of ctn", "N/A"),
-                "SpeedX": distributors_info["SpeedX配送"].get("number of ctn", "N/A"),
-                "Maersk": distributors_info["MAERSK-末端配送"].get("number of ctn", "N/A"),
-                "total": str(int(total_ctn)),  # 箱数总和
-                "parcel": str(int(total_parcel)),  # parcels总和
-                "PMC": "",  # 留空
-                "PMC return": "",  # 留空
-                "1F": "",  # 留空
+                "UP": val_up,
+                "USPS": val_usps,
+                "ONTRAC": "",
+                "DHLe": "",
+                "UNIUNI": val_uni,
+                "SpeedX": val_speedx,
+                "Maersk": val_maersk,
+                "total": str(int(total_ctn)),
+                "parcel": str(int(total_parcel)),
+                "PMC": "",
+                "PMC / Loose on hand": "",
+                "PMC return": "",
+                "1F": "",
                 "FLT#": info.get("FLIGHT NUMBER", "N/A"),
                 "ETA": info.get("ETA", "N/A"),
+                # 注意：这里的 Key 必须和下面的 headers 列表里定义的字符串严格一致
+                "UP_NA": check_na(val_up),
+                "USPS_NA": check_na(val_usps),
+                "ONTRACK_NA": "-",
+                "DHL_NA":"-",
+                "SpeedX_NA": check_na(val_speedx),
+
+                "UNIUNI_NA": check_na(val_uni),
+                "Maersk_NA": check_na(val_maersk)
             }
             results.append(flat_info)
 
             update_output_text(output_text, f"已完成{processed_count}封邮件\n")
-            processed_count+=1
+            processed_count += 1
         else:
             continue
 
-    # ========= 表头（第1行）=========
-    headers = [
-        "MAWB",
-        "UP",
-        "USPS",
-        "UNIUNI",
-        "SpeedX",
-        "Maersk",
-        "total",
-        "parcel",
-        "PMC",
-        "PMC return",
-        "1F",
-        "FLT#",
-        "ETA"
-    ]
+            # ========= 表头定义（Pandas会根据这些名称去字典里找数据）=========
+        headers = [
+            "MAWB", "UP", "USPS", "ONTRAC", "DHLe", "UNIUNI", "SpeedX", "Maersk",
+            "total", "parcel", "PMC", "PMC / Loose on hand", "PMC return", "1F", "FLT#", "ETA",
+            "UP_NA",  # 对应字典里的 UP_NA
+            "USPS_NA",  # 对应字典里的 USPS_NA
+            "ONTRACK_NA",
+            "DHL_NA",
+            "UNIUNI_NA",  # 对应字典里的 UNIUNI_NA
+            "SpeedX_NA",  # 对应字典里的 SpeedX_NA
+            "Maersk_NA"  # 对应字典里的 Maersk_NA
+        ]
 
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
     df = pd.DataFrame(results, columns=headers)
@@ -3588,27 +3611,37 @@ def email_program_mia_4px(account, password, output_text, folder_id_param, limit
             # 根据您的要求，只对 COE 渠道提取 Parcels 并求和
             total_parcels = safe_int(info.get("COE_PARCELS", "0"))
 
-            # --- 3. 展平数据：按新的表头顺序 ---
+            check_keys = ["COE_CTN", "GOFO", "SPX", "TE", "USPS"]
+            na_results = {}
+
+            for key in check_keys:
+                val = info.get(key, "N/A")
+                # 如果是 N/A 则填 "-"，否则为空字符串
+                na_results[key + "_check"] = "-" if str(val).upper() == "N/A" else ""
+
+            # --- 5. 展平数据：按新的表头顺序 ---
             flat_info = {
-                # 第一列：未识别渠道
                 "未识别渠道": info.get("未识别渠道", "N/A"),
-                # 主信息
                 "MAWB": info.get("MAWB", "N/A"),
-                "FLT#": info.get("FLIGHT NUMBER", "N/A"),
-                "ETA": info.get("ETA", "N/A"),
-                # 渠道 CTN (只展示 number of ctn)
-                "COE": info.get("COE_CTN", "N/A"),  # 使用 COE_CTN 键
+                # C-G 列
+                "COE": info.get("COE_CTN", "N/A"),
                 "GOFO": info.get("GOFO", "N/A"),
                 "SPX": info.get("SPX", "N/A"),
                 "TOO": info.get("TE", "N/A"),
                 "USPS": info.get("USPS", "N/A"),
                 "YANWEN": info.get("YW EXP", "N/A"),
-                # 求和结果
                 "total CTN": str(total_ctn),
                 "parcel": str(total_parcels),
-                # 留空列
-                "PMC": "",
+                "PMC": info.get("BUP", "N/A"),
                 "PMC return": "",
+                "FLT#": info.get("FLIGHT NUMBER", "N/A"),
+                "ETA": info.get("ETA", "N/A"),
+                # O-S 列 (新增的列，将对应到 Excel 的 O, P, Q, R, S 列)
+                "COE_NA": na_results["COE_CTN_check"],
+                "GOFO_NA": na_results["GOFO_check"],
+                "SPX_NA": na_results["SPX_check"],
+                "TOO_NA": na_results["TE_check"],
+                "USPS_NA": na_results["USPS_check"]
             }
 
             results.append(flat_info)
@@ -3620,11 +3653,12 @@ def email_program_mia_4px(account, password, output_text, folder_id_param, limit
     # ========= 表头（第1行）=========
     # 最终表头（按你给定的顺序与命名）
     header_keys = [
-        "未识别渠道", "MAWB",
-        "COE", "GOFO", "SPX", "TOO", "USPS", "YANWEN",  # 渠道 CTN
-        "total CTN", "parcel",  # 总和
-        "PMC", "PMC return",  # 留空
-        "FLT#", "ETA"  # 航班信息
+        "未识别渠道", "MAWB",  # A, B
+        "COE", "GOFO", "SPX", "TOO", "USPS", "YANWEN",  # C, D, E, F, G, H
+        "total CTN", "parcel",  # I, J
+        "PMC", "PMC return",  # K, L
+        "FLT#", "ETA",  # M, N
+        "COE_NA", "GOFO_NA", "SPX_NA", "TOO_NA", "USPS_NA"  # O, P, Q, R, S (新增)
     ]
 
     # ========= 写入 Excel（使用你定义的 file_path，从第2行开始）=========
@@ -4177,9 +4211,9 @@ def wipe_off_mia(account, password, output_text, folder_id_param, limit_param):
     df = pd.DataFrame(results, columns=header_keys)
 
     # 向上取整逻辑
-    for col in df.columns:
+    for col in df.columns:  
         if col.endswith("_CTN"):
-            divisor = 10 if "USPS" in col else 20
+            divisor = 8 if "USPS" in col else 16
             df[col] = df[col].apply(lambda x: x if x == "N/A" else -(-float(x) // divisor))
 
     update_output_text(output_text, "正在写入 Excel...\n")
@@ -6105,7 +6139,7 @@ def go_back_to_main(current_frame, account, password):
 
 # 初始化主窗口
 root = ctk.CTk()
-root.title("ORD bug 修复测试中")
+root.title("代码维护中")
 root.geometry("600x420")
 root.configure(fg_color="#1e1e1e")
 
