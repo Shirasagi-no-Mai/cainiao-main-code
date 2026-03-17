@@ -1214,39 +1214,39 @@ def node_status(output_text, mode='1'):
     if os.path.exists(file_path_ags):
         wb_ags = openpyxl.load_workbook(file_path_ags, data_only=True)
         ws_ags = wb_ags.active
-        headers = [str(cell.value).replace("\n", " ").strip() if cell.value else "" for cell in ws_ags[1]]
+        # 1. 强力清洗：把换行(\n)、回车(\r)和空格全删掉，统统变大写
+        headers = []
+        for cell in ws_ags[1]:
+            if cell.value:
+                clean_h = str(cell.value).replace("\n", "").replace("\r", "").replace(" ", "").upper()
+                headers.append(clean_h)
+            else:
+                headers.append("")
+
+        # 2. 这里的 Key 也要对应删掉空格和换行
         mapping = {
-            "UNI": "LAST MILES UNI (2070)", "COE": "LAST MILES COE (2070)",
-            "USPS": "LAST MILES USPS (2070)", "MAERSK": "LAST MILES MAERSK (2070)",
-            "SPEEDX": "LAST MILES SPEEDX(2070)",
-            "IN_BACKUP": "CARGO IN TIME 2020", "OUT_BACKUP": "SORTING TIME (2060)"
+            "UNI": "LASTMILESUNI(2070)",
+            "COE": "LASTMILESCOE(2070)",
+            "USPS": "LASTMILESUSPS(2070)",
+            "MAERSK": "LASTMILESMAERSK(2070)",
+            "SPEEDX": "LASTMILESSPEEDX(2070)",
+            "IN_BACKUP": "CARGOINTIME2020",  # 对应你同事表格清洗后的样子
+            "OUT_BACKUP": "SORTINGTIME(2060)"
         }
-        idx_map = {k: headers.index(v) + 1 for k, v in mapping.items() if v in headers}
-
-        #检测
-        update_output_text(output_text, f"🔍 AGS 列名匹配结果: {idx_map}\n")
-        if "IN_BACKUP" not in idx_map:
-            update_output_text(output_text,
-                               "❌ 警告: 未在 AGS 表中找到 'CARGO IN TIME 2020' 列，请检查列名是否有空格或特殊字符\n")
-        #检测
-
+        # 3. 使用 in 来进行模糊匹配，更稳健
+        idx_map = {}
+        for k, v in mapping.items():
+            for i, h in enumerate(headers):
+                if v in h:  # 只要包含关键字就匹配
+                    idx_map[k] = i + 1
+                    break
         for r in range(2, ws_ags.max_row + 1):
             awb_val = str(ws_ags.cell(row=r, column=3).value or "").replace(" ", "")
             if awb_val:
-                # --- 新增日志：显示原始值 ---
-                raw_in_time = ws_ags.cell(row=r, column=idx_map.get("IN_BACKUP", 1)).value
-                parsed_in_time = convert_to_standard_time(raw_in_time)
-
-                # 记录解析过程
                 ags_info[awb_val] = {k: convert_to_standard_time(ws_ags.cell(row=r, column=v).value) for k, v in
                                      idx_map.items()}
 
-                # 如果你想针对特定单号看（或者全部看，但量大建议只看失败的）
-                if not parsed_in_time and raw_in_time:
-                    update_output_text(output_text, f"⚠️ 单号 {awb_val} 入库原始值: '{raw_in_time}' -> 解析后变空\n")
-                elif raw_in_time:
-                    # 正常解析的也可以打一行简短的确认
-                    pass
+
 
     wb = openpyxl.load_workbook(file_path_bbc)
     ws = wb.active
@@ -1297,12 +1297,9 @@ def node_status(output_text, mode='1'):
 
         if not (cur_in_s == 'Y' or cur_in_t in ['#N/A']):
             val_in = api_in_t if (mode == '1' and api_in_t) else ags.get("IN_BACKUP")
-            # --- 新增日志：确认最终拿到了什么值 ---
             if val_in:
-                update_output_text(output_text, f"✅ {awb} 匹配到入库时间: {val_in}\n")
                 ws.cell(row=row, column=11).value = val_in
-            else:
-                update_output_text(output_text, f"❓ {awb} 未能从 API 或 AGS 匹配到入库时间\n")
+            elif not ws.cell(row=row, column=11).value:
                 ws.cell(row=row, column=11).value = "N"
 
         if not (cur_out_s == 'Y' or cur_out_t in ['#N/A']):
