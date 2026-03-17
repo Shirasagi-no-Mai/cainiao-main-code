@@ -1222,13 +1222,31 @@ def node_status(output_text, mode='1'):
             "IN_BACKUP": "CARGO IN TIME 2020", "OUT_BACKUP": "SORTING TIME (2060)"
         }
         idx_map = {k: headers.index(v) + 1 for k, v in mapping.items() if v in headers}
+
+        #检测
+        update_output_text(output_text, f"🔍 AGS 列名匹配结果: {idx_map}\n")
+        if "IN_BACKUP" not in idx_map:
+            update_output_text(output_text,
+                               "❌ 警告: 未在 AGS 表中找到 'CARGO IN TIME 2020' 列，请检查列名是否有空格或特殊字符\n")
+        #检测
+
         for r in range(2, ws_ags.max_row + 1):
             awb_val = str(ws_ags.cell(row=r, column=3).value or "").replace(" ", "")
             if awb_val:
+                # --- 新增日志：显示原始值 ---
+                raw_in_time = ws_ags.cell(row=r, column=idx_map.get("IN_BACKUP", 1)).value
+                parsed_in_time = convert_to_standard_time(raw_in_time)
+
+                # 记录解析过程
                 ags_info[awb_val] = {k: convert_to_standard_time(ws_ags.cell(row=r, column=v).value) for k, v in
                                      idx_map.items()}
 
-
+                # 如果你想针对特定单号看（或者全部看，但量大建议只看失败的）
+                if not parsed_in_time and raw_in_time:
+                    update_output_text(output_text, f"⚠️ 单号 {awb_val} 入库原始值: '{raw_in_time}' -> 解析后变空\n")
+                elif raw_in_time:
+                    # 正常解析的也可以打一行简短的确认
+                    pass
 
     wb = openpyxl.load_workbook(file_path_bbc)
     ws = wb.active
@@ -1279,9 +1297,12 @@ def node_status(output_text, mode='1'):
 
         if not (cur_in_s == 'Y' or cur_in_t in ['#N/A']):
             val_in = api_in_t if (mode == '1' and api_in_t) else ags.get("IN_BACKUP")
+            # --- 新增日志：确认最终拿到了什么值 ---
             if val_in:
+                update_output_text(output_text, f"✅ {awb} 匹配到入库时间: {val_in}\n")
                 ws.cell(row=row, column=11).value = val_in
-            elif not ws.cell(row=row, column=11).value:
+            else:
+                update_output_text(output_text, f"❓ {awb} 未能从 API 或 AGS 匹配到入库时间\n")
                 ws.cell(row=row, column=11).value = "N"
 
         if not (cur_out_s == 'Y' or cur_out_t in ['#N/A']):
