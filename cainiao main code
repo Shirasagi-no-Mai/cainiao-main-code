@@ -943,18 +943,21 @@ def node_update(output_text):
                 log_str = f"{awb}, {name}, {t_val.strftime('%Y-%m-%d %H:%M:%S')}"
 
                 # --- 核心修改点：出库/渠道的前置依赖检查 ---
-                if name == "OUTBOUND" and inbound_status not in ["Y", "YES"]:
-                    msg = f"{awb}: 出库缺少入库(Y)，暂不加入待传"
-                    blocked_list.append(msg)
-                    summary_report += f"⚠️ {msg}\n"
-                    continue  # 跳过，不加入 pending_list
-
-                if p_type >= 3:  # 渠道类节点依赖出库状态
-                    outbound_status = str(ws.cell(row=r, column=5).value).strip().upper()
-                    if outbound_status not in ["Y", "YES"]:
-                        msg = f"{awb}: {name} 缺少出库(Y)，暂不加入待传"
+                if name == "OUTBOUND":
+                    # 只要【入库列本身有时间】或者【入库已经是Y】，就允许出库进入队列
+                    t_inbound = parse_to_dt(ws.cell(row=r, column=11).value)
+                    if not t_inbound and inbound_status not in ["Y", "YES"]:
+                        msg = f"{awb}: 出库缺少入库时间且未同步，拦截"
                         blocked_list.append(msg)
-                        summary_report += f"⚠️ {msg}\n"
+                        continue
+
+                if p_type >= 3:
+                    # 只要【出库列本身有时间】或者【出库已经是Y】，就允许渠道进入队列
+                    t_outbound = parse_to_dt(ws.cell(row=r, column=12).value)
+                    outbound_status = str(ws.cell(row=r, column=5).value).strip().upper()
+                    if not t_outbound and outbound_status not in ["Y", "YES"]:
+                        msg = f"{awb}: {name} 缺少出库时间且未同步，拦截"
+                        blocked_list.append(msg)
                         continue
 
                 # --- 正常的 23h 限制检查 ---
@@ -1029,6 +1032,10 @@ def node_update(output_text):
 
     wb.save(file_path_bbc)
     update_output_text(output_text, "更新完毕。\n")
+
+
+
+
 def node_status(output_text, mode='1'):
     # --- 颜色定义 ---
     GREEN_FILL = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
