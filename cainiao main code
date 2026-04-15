@@ -122,57 +122,89 @@ def update_output_text(output_text, message):
 
 def ken_appeal_program(account, password, output_text):
     """
-    KEN老师申诉主程序：包含自动登录获取Token及数据处理逻辑
+    KEN老师申诉主程序 - 使用第二段代码的 Selenium 逻辑维护 Token
     """
+    import openpyxl
+    from openpyxl import Workbook
+    import json, os, sys, requests, re, time
+    from datetime import datetime, timedelta
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
     # --- 1. 环境检查与路径初始化 ---
     user_home = os.path.expanduser("~")
     possible_paths = [
-        os.path.join(user_home, "Desktop"),
-        os.path.join(user_home, "桌面"),
-        os.path.join(user_home, "OneDrive", "Desktop"),
-        os.path.join(user_home, "OneDrive", "桌面")
+        os.path.join(user_home, "Desktop"), os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"), os.path.join(user_home, "OneDrive", "桌面")
     ]
     desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
 
+    def log(msg):
+        """UI 输出函数"""
+        output_text.insert("end", f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+        output_text.see("end")
+
     if not desktop_path:
-        update_output_text(output_text, "错误：找不到桌面路径")
+        log("找不到桌面路径")
         return
 
-    txt_file_path = os.path.join(desktop_path, "面单.txt")
     file_path = os.path.join(desktop_path, "面单下载.xlsx")
-
-    # 检查 Excel
     if not os.path.exists(file_path):
         wb = Workbook()
         wb.save(file_path)
-        update_output_text(output_text, "已在桌面新建空表：面单下载.xlsx")
+        log("未找到 Excel 文件，已新建空表。")
         return
 
-    # --- 2. 内部函数：Selenium 获取 Token 逻辑 ---
-    def acquire_token_selenium(acc, pwd):
-        update_output_text(output_text, "正在启动浏览器获取登录状态...")
+    # --- 2. 内部逻辑函数 (完全复刻你提供的第二段代码) ---
+
+    def run_token_maintenance():
+        log("正在启动 Chrome 浏览器维护登录状态...")
+
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
-        # 如果不想看浏览器弹窗，可以取消下面这一行的注释：
-        # chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--always-on-top")
+        chrome_options.add_argument("--force-device-scale-factor=0.5")  # 50% 缩放
 
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             driver.set_window_size(1920, 1080)
 
-            # 访问目标页面
-            url = "https://os.gpn.cainiao-inc.com/ferform/Parcel360/tracking?__next_force_pc__=true&code=AP00774302758876"
-            driver.get(url)
+            # 访问 URL 并通过 JS 设置缩放
+            target_url = "https://os.gpn.cainiao-inc.com/ferform/Parcel360/tracking?__next_force_pc__=true&code=AP00774302758876"
+            driver.get(target_url)
+            driver.execute_script("document.body.style.zoom='50%'")
+            driver.maximize_window()
 
-            # 等待登录页面加载
-            WebDriverWait(driver, 20).until(lambda d: "sign" in d.page_source.lower())
+            # 多标签页清理逻辑
+            all_tabs = driver.window_handles
+            for tab in all_tabs:
+                driver.switch_to.window(tab)
+                if "data:" in driver.current_url:
+                    driver.close()
 
-            # 输入账号密码
-            update_output_text(output_text, f"正在尝试登录账号: {acc}")
-            driver.find_element(By.ID, "account").send_keys(acc)
-            driver.find_element(By.ID, "password").send_keys(pwd)
+            # 重新定位回主窗口
+            all_tabs = driver.window_handles
+            if all_tabs:
+                driver.switch_to.window(all_tabs[0])
+
+            # 等待登录页面特征码 "sign"
+            log("等待登录页面加载...")
+            WebDriverWait(driver, 15).until(
+                lambda d: "sign" in d.page_source.lower()
+            )
+
+            # 执行登录 (使用传入的 account 和 password)
+            log(f"输入账号密码: {account}")
+            driver.find_element(By.XPATH, '//*[@id="account"]').send_keys(account)
+            driver.find_element(By.XPATH, '//*[@id="password"]').send_keys(password)
 
             # 点击登录
             login_btn_xpath = "/html/body/div[1]/div/div[1]/div[2]/div[2]/div[2]/div/form/div[3]/div/button"
@@ -180,129 +212,153 @@ def ken_appeal_program(account, password, output_text):
 
             # 等待跳转成功
             WebDriverWait(driver, 60).until(EC.title_contains("Tracking-detail"))
-            update_output_text(output_text, "登录成功，正在提取 Cookie...")
+            log(f"登录成功: {driver.title}")
 
             # 提取 Cookie
             sel_cookies = driver.get_cookies()
             cookies_dict = {c['name']: c['value'] for c in sel_cookies}
             xsrf_token = cookies_dict.get('XSRF-TOKEN', None)
 
-            # 写入本地文件
-            with open(txt_file_path, 'w', encoding='utf-8') as f:
-                f.write(json.dumps({"cookies": cookies_dict, "xsrf_token": xsrf_token}, ensure_ascii=False))
+            # 写入本地文件 "面单.txt"
+            txt_file_path = os.path.join(desktop_path, "面单.txt")
+            with open(txt_file_path, 'w', encoding='utf-8') as txt_file:
+                txt_file.write(json.dumps({"cookies": cookies_dict, "xsrf_token": xsrf_token}, ensure_ascii=False))
 
             driver.quit()
+            log("Token 维护成功并已保存至桌面。")
             return True
         except Exception as e:
-            update_output_text(output_text, f"获取 Token 失败: {str(e)}")
+            log(f"Token 更新过程中出错: {e}")
             if 'driver' in locals(): driver.quit()
             return False
 
-    # --- 3. 内部函数：基础业务逻辑 ---
-    def read_local_token():
+    # --- 3. 业务工具函数 (保持与原版代码2一致) ---
+    def read_cookies_from_txt():
         try:
-            with open(txt_file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return data.get("cookies", {}), data.get("xsrf_token", None)
+            txt_path = os.path.join(desktop_path, "面单.txt")
+            if os.path.exists(txt_path):
+                with open(txt_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get("cookies", {}), data.get("xsrf_token", None)
+            return {}, None
         except:
             return {}, None
 
-    def get_post_history(order_code, cookies, token):
+    def _format_time_from_ms(ms_value, tz_str=None):
+        try:
+            seconds = ms_value / 1000.0
+            dt_utc = datetime.utcfromtimestamp(seconds)
+            dt_local = dt_utc
+            if tz_str and isinstance(tz_str, str):
+                tz_clean = tz_str.strip()
+                m = re.match(r"^(?:UTC)?([+-])(\d{2}):(\d{2})$", tz_clean)
+                if m:
+                    sign = 1 if m.group(1) == "+" else -1
+                    offset = timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+                    dt_local = dt_utc + sign * offset
+            return dt_local.strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            return "N/A"
+
+    def get_post_history(lgOrderCode):
+        cookies_dict, xsrf_token = read_cookies_from_txt()
         url = "https://ail-gpn.alibaba-inc.com/packagenetwork-default-workspace/GLOBAL-PACKAGE-NEWWORK/order360/queryTraceInfo"
-        headers = {
-            "Content-Type": "application/json;charset=UTF-8",
-            "X-Xsrf-Token": token,
-            "X-Os-Request-App-Code": "GLOBAL-PACKAGE-NEWWORK"
-        }
-        payload = {"orderCode": order_code, "pageSize": 500, "tenantCode": "AE_GLOBAL@CAINIAO_GLOBAL",
+        headers = {"Content-Type": "application/json;charset=UTF-8", "X-Xsrf-Token": xsrf_token,
+                   "User-Agent": "Mozilla/5.0", "X-Os-Request-App-Code": "GLOBAL-PACKAGE-NEWWORK",
+                   "Tenantid": "default"}
+        payload = {"orderCode": lgOrderCode, "pageSize": 500, "tenantCode": "AE_GLOBAL@CAINIAO_GLOBAL",
                    "bizChannel": "AE"}
         try:
-            res = requests.post(url, headers=headers, cookies=cookies, json=payload, timeout=10)
+            res = requests.post(url, headers=headers, cookies=cookies_dict, json=payload, timeout=10)
             return res.json() if res.status_code == 200 else {}
         except:
             return {}
 
-    def extract_time(resp_json, act_code, first=True):
+    def get_mawb_order_code(lgOrderCode):
+        cookies_dict, xsrf_token = read_cookies_from_txt()
+        url = "https://ail-gpn.alibaba-inc.com/packagenetwork-default-workspace/GLOBAL-PACKAGE-NEWWORK/order360/queryOrderStatusInfo"
+        headers = {"Content-Type": "application/json;charset=UTF-8", "X-Xsrf-Token": xsrf_token}
+        payload = {"lgOrderCode": str(lgOrderCode), "tenantCode": "AE_GLOBAL@CAINIAO_GLOBAL", "bizChannel": "AE"}
+        try:
+            res = requests.post(url, headers=headers, cookies=cookies_dict, json=payload, timeout=10)
+            if res.status_code == 200:
+                for item in res.json().get("data", []):
+                    if item.get("orderType") == "mawbOrder": return item.get("orderCode")
+            return "N/A"
+        except:
+            return "N/A"
+
+    def extract_time_by_activity(resp_json, activity_code, use_max=False):
         found = []
 
         def walk(obj):
             if isinstance(obj, dict):
-                if obj.get("activityCode") == act_code and "operateTime" in obj: found.append(obj)
+                if obj.get("activityCode") == activity_code and "operateTime" in obj: found.append(obj)
                 for v in obj.values(): walk(v)
             elif isinstance(obj, list):
-                for i in obj: walk(i)
+                for item in obj: walk(item)
 
         walk(resp_json)
         if not found: return "N/A"
-        # 妥投取第一条，清关取最后一条(max)
-        target = found[0] if first else max(found, key=lambda x: x.get("operateTime", 0))
+        if use_max:
+            target = max(found, key=lambda x: x.get("operateTime", 0))
+        else:
+            found.sort(key=lambda x: x.get("operateTime", 0))
+            target = found[0]
+        return _format_time_from_ms(target.get("operateTime"), target.get("timeZone"))
 
-        # 简单的格式化逻辑
-        try:
-            dt = datetime.utcfromtimestamp(target.get("operateTime") / 1000.0)
-            # 加上东八区偏移或保持原样
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except:
-            return "N/A"
+    # --- 4. 执行主逻辑 ---
 
-    # --- 4. 主执行流程 ---
-
-    # 第一步：获取 Token
-    if not acquire_token_selenium(account, password):
-        update_output_text(output_text, "无法获取 Token，程序终止。")
+    # 初始获取一次 Token
+    if not run_token_maintenance():
+        log("无法初始获取 Token，程序终止。")
         return
 
-    # 第二步：处理 Excel
-    try:
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        update_output_text(output_text, "开始处理 Excel 数据...")
+    last_token_update = time.time()
+    wb = openpyxl.load_workbook(file_path)
+    ws = wb.active
+    counter = 0
 
-        cookies, token = read_local_token()
-        counter = 0
-        last_update_time = time.time()
+    for row in range(1, ws.max_row + 1):
+        if 'stop_event' in globals() and stop_event.is_set():
+            log("停止信号已发出。")
+            break
 
-        for row in range(1, ws.max_row + 1):
-            # 检查是否点击了停止 (如果有全局stop_event)
-            if 'stop_event' in globals() and stop_event.is_set():
-                update_output_text(output_text, "任务手动停止。")
-                break
+        order_code = ws.cell(row=row, column=1).value
+        if not order_code: continue
 
-            order_code = ws.cell(row=row, column=1).value
-            if not order_code: continue
+        # 每 20 分钟自动更新一次 Token
+        if time.time() - last_token_update > 1200:
+            run_token_maintenance()
+            last_token_update = time.time()
 
-            # 每20分钟尝试重新登录一次以维持长效 Token (可选)
-            if time.time() - last_update_time > 1200:
-                acquire_token_selenium(account, password)
-                cookies, token = read_local_token()
-                last_update_time = time.time()
+        log(f"处理订单: {order_code}")
+        try:
+            resp_trace = get_post_history(order_code)
+            c_time = extract_time_by_activity(resp_trace, "CUSTOMS_CC_DECLARE_INSPECTION", True)
+            d_time = extract_time_by_activity(resp_trace, "LAST_MILE_GTMS_SIGNED_CALLBACK")
+            f_time = extract_time_by_activity(resp_trace, "CUSTOMS_HO_OUT_SUCCESS_CALLBACK")
+            mawb_code = get_mawb_order_code(order_code)
 
-            # 发起请求
-            resp = get_post_history(order_code, cookies, token)
-
-            # 提取数据
-            c_time = extract_time(resp, "CUSTOMS_CC_DECLARE_INSPECTION", first=False)
-            d_time = extract_time(resp, "LAST_MILE_GTMS_SIGNED_CALLBACK")
-            f_time = extract_time(resp, "CUSTOMS_HO_OUT_SUCCESS_CALLBACK")
-
-            # 写入
             ws.cell(row=row, column=3, value=c_time)
             ws.cell(row=row, column=4, value=d_time)
+            ws.cell(row=row, column=5, value=mawb_code)
             ws.cell(row=row, column=6, value=f_time)
 
-            if counter % 10 == 0:
-                update_output_text(output_text, f"正在处理第 {row} 行: {order_code}")
+            log(f"   > 清关:{c_time} | 妥投:{d_time} | 主单:{mawb_code} | 交出:{f_time}")
 
             counter += 1
-            if counter % 100 == 0:
+            if counter % 50 == 0:
                 wb.save(file_path)
-                update_output_text(output_text, "自动保存中...")
+                log(f"--- [自动保存] 已处理 {counter} 条 ---")
 
-        wb.save(file_path)
-        update_output_text(output_text, f"✅ 处理完成！总计: {counter} 条")
+        except Exception as e:
+            log(f"   [错误] 订单 {order_code}: {e}")
 
-    except Exception as e:
-        update_output_text(output_text, f"程序运行出错: {str(e)}")
+    wb.save(file_path)
+    log(f"全部完成，共处理 {counter} 条数据。")
+
+
 # *************************预设*****************************************************************************************
 def creat_node_task(output_text):
     user_home = os.path.expanduser("~")
