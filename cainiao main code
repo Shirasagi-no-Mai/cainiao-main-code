@@ -120,6 +120,168 @@ def update_output_text(output_text, message):
     output_text.yview(tk.END)
 
 
+def ken_appeal_program(account, password, output_text):
+    """
+    KEN老师申诉主程序 (原代码2)
+    """
+    # --- 初始化路径 ---
+    user_home = os.path.expanduser("~")
+    possible_paths = [
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "桌面"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "OneDrive", "桌面")
+    ]
+    desktop_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if not desktop_path:
+        update_output_text(output_text, "错误：找不到桌面路径")
+        return
+
+    file_path = os.path.join(desktop_path, "面单下载.xlsx")
+    if not os.path.exists(file_path):
+        wb = Workbook()
+        wb.save(file_path)
+        update_output_text(output_text, "未找到 Excel 文件，已在桌面新建空表。")
+        return
+
+    # --- 内部变量与闭包函数 ---
+    state = {"last_token_update": 0}
+
+    def run_get_token_script():
+        """运行同级目录下的 get token alibaba.py"""
+        script_name = "get token alibaba.py"
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(current_dir, script_name)
+
+        if os.path.exists(script_path):
+            update_output_text(output_text, "正在运行 Token 维护脚本...")
+            try:
+                result = subprocess.run([sys.executable, script_path], capture_output=True, text=True)
+                if result.returncode == 0:
+                    state["last_token_update"] = time.time()
+                    update_output_text(output_text, "Token 更新成功。")
+                else:
+                    update_output_text(output_text, f"Token 脚本出错: {result.stderr}")
+            except Exception as e:
+                update_output_text(output_text, f"运行 Token 脚本失败: {e}")
+        else:
+            update_output_text(output_text, f"警告：未找到 {script_name}")
+
+    def read_cookies():
+        try:
+            txt_file_path = os.path.join(desktop_path, "面单.txt")
+            if os.path.exists(txt_file_path):
+                with open(txt_file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get("cookies", {}), data.get("xsrf_token", None)
+            return {}, None
+        except:
+            return {}, None
+
+    def _format_time(ms, tz_str):
+        try:
+            dt = datetime.utcfromtimestamp(ms / 1000.0)
+            if tz_str:
+                m = re.match(r"^(?:UTC)?([+-])(\d{2}):(\d{2})$", tz_str.strip())
+                if m:
+                    sign = 1 if m.group(1) == "+" else -1
+                    offset = timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+                    dt += sign * offset
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            return "N/A"
+
+    def get_history(lgCode):
+        cookies, token = read_cookies()
+        url = "https://ail-gpn.alibaba-inc.com/packagenetwork-default-workspace/GLOBAL-PACKAGE-NEWWORK/order360/queryTraceInfo"
+        headers = {"Content-Type": "application/json;charset=UTF-8", "X-Xsrf-Token": token,
+                   "X-Os-Request-App-Code": "GLOBAL-PACKAGE-NEWWORK"}
+        payload = {"orderCode": lgCode, "pageSize": 500, "tenantCode": "AE_GLOBAL@CAINIAO_GLOBAL", "bizChannel": "AE"}
+        try:
+            res = requests.post(url, headers=headers, cookies=cookies, json=payload, timeout=10)
+            return res.json() if res.status_code == 200 else {}
+        except:
+            return {}
+
+    def get_mawb(lgCode):
+        cookies, token = read_cookies()
+        url = "https://ail-gpn.alibaba-inc.com/packagenetwork-default-workspace/GLOBAL-PACKAGE-NEWWORK/order360/queryOrderStatusInfo"
+        headers = {"Content-Type": "application/json;charset=UTF-8", "X-Xsrf-Token": token}
+        payload = {"lgOrderCode": str(lgCode), "tenantCode": "AE_GLOBAL@CAINIAO_GLOBAL", "bizChannel": "AE"}
+        try:
+            res = requests.post(url, headers=headers, cookies=cookies, json=payload, timeout=10)
+            if res.status_code == 200:
+                for item in res.json().get("data", []):
+                    if item.get("orderType") == "mawbOrder": return item.get("orderCode")
+            return "N/A"
+        except:
+            return "N/A"
+
+    def extract_time_by_code(resp, act_code, find_first=True):
+        found = []
+
+        def walk(obj):
+            if isinstance(obj, dict):
+                if obj.get("activityCode") == act_code and "operateTime" in obj: found.append(obj)
+                for v in obj.values(): walk(v)
+            elif isinstance(obj, list):
+                for i in obj: walk(i)
+
+        walk(resp)
+        if not found: return "N/A"
+        target = found[0] if find_first else max(found, key=lambda x: x.get("operateTime", 0))
+        return _format_time(target.get("operateTime"), target.get("timeZone"))
+
+    # --- 开始执行逻辑 ---
+    run_get_token_script()
+
+    try:
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        counter = 0
+        total_rows = ws.max_row
+
+        for row in range(1, total_rows + 1):
+            # 检查 GUI 是否发出了停止信号 (假设 stop_event 在全局定义)
+            if 'stop_event' in globals() and stop_event.is_set():
+                update_output_text(output_text, "任务已被用户手动停止。")
+                break
+
+            order_code = ws.cell(row=row, column=1).value
+            if not order_code: continue
+
+            # Token 维护 (每20分钟)
+            if time.time() - state["last_token_update"] > 1200:
+                run_get_token_script()
+
+            update_output_text(output_text, f"[{row}/{total_rows}] 处理订单: {order_code}")
+
+            try:
+                resp_trace = get_history(order_code)
+                c_time = extract_time_by_code(resp_trace, "CUSTOMS_CC_DECLARE_INSPECTION", False)
+                d_time = extract_time_by_code(resp_trace, "LAST_MILE_GTMS_SIGNED_CALLBACK")
+                f_time = extract_time_by_code(resp_trace, "CUSTOMS_HO_OUT_SUCCESS_CALLBACK")
+                mawb_code = get_mawb(order_code)
+
+                ws.cell(row=row, column=3, value=c_time)
+                ws.cell(row=row, column=4, value=d_time)
+                ws.cell(row=row, column=5, value=mawb_code)
+                ws.cell(row=row, column=6, value=f_time)
+
+                counter += 1
+                if counter % 50 == 0:
+                    wb.save(file_path)
+                    update_output_text(output_text, f"已处理 {counter} 条，系统自动保存...")
+
+            except Exception as e:
+                update_output_text(output_text, f"处理订单 {order_code} 时出错: {e}")
+
+        wb.save(file_path)
+        update_output_text(output_text, f"✅ 全部完成！共处理 {counter} 条。文件已保存至桌面。")
+
+    except Exception as e:
+        update_output_text(output_text, f"Excel 操作失败: {e}")
 # *************************预设*****************************************************************************************
 def creat_node_task(output_text):
     user_home = os.path.expanduser("~")
@@ -5735,6 +5897,8 @@ def start_program(account, password, output_text, task_type, mode=None):
 
     if task_type == "itac检测":
         FDA_program(account, password, output_text)
+    if task_type == "KEN老师申诉":  # <--- 新增
+        ken_appeal_program(account, password, output_text)
     if task_type == "获取节点身份信息":
         node_token(account, password, output_text)
     if task_type == "获取email身份信息":
@@ -5849,7 +6013,7 @@ def show_main_window(account, password):
                   ("email下载 ord", lambda: switch_to_task("email下载 ord")),
                   ("实报实销AE测试", lambda: switch_to_task("实报实销AE测试")),
                   ("实报实销mia", lambda: switch_to_task("实报实销mia")),
-
+                  ("KEN老师申诉", lambda: switch_to_task("KEN老师申诉")),
                   ("梦想成真模拟器", lambda: switch_to_task("梦想成真模拟器")),
                   ("实报实销lax", lambda: switch_to_task("实报实销lax")),
                   ("实报实销ord", lambda: switch_to_task("实报实销ord")),
