@@ -1016,7 +1016,16 @@ def node_update(output_text):
         return {"testMode": "false", "domain": "USA", "gateCode": "All",
                 "handler": "selfServiceUsaManifestUpdateHandler",
                 "param": json.dumps(param_dict, ensure_ascii=False, separators=(',', ':')), "type": "NONE"}
-
+    def generate_payload_type8(b_value, n_value):
+        param_dict = {"operateTime": n_value.strftime('%Y-%m-%d %H:%M:%S'), "operateTimeZone": "America/Los_Angeles",
+                      "status": "PARTIAL_HANDOVER", "partialIdType": "LAST_MILE_ID",
+                      "lastmileResourceList": ["DISTRIBUTOR_A8800122001"], # <--- 请确认此 ID 是否正确
+                      "mainOrderCode": b_value, "bigBagIdList": [],
+                      "testMode": "false", "domain": "USA", "lang": "zh-CN",
+                      "lastmileResourceNameList": ["GOFO配送"]} # <--- 请确认此名称
+        return {"testMode": "false", "domain": "USA", "gateCode": "All",
+                "handler": "selfServiceUsaManifestUpdateHandler",
+                "param": json.dumps(param_dict, ensure_ascii=False, separators=(',', ':')), "type": "NONE"}
     # ==================== 2. 辅助工具 (完全保留原始逻辑) ====================
     def convert_to_standard_time(val):
         if val is None: return None
@@ -1117,7 +1126,7 @@ def node_update(output_text):
         ws_ags = wb_ags.active
         headers = [str(cell.value).replace("\n", " ").strip() if cell.value else "" for cell in ws_ags[1]]
         mapping = {"UNI": "LAST MILES UNI (2070)", "COE": "LAST MILES COE (2070)", "USPS": "LAST MILES USPS (2070)",
-                   "MAERSK": "LAST MILES MAERSK (2070)", "SPEEDX": "LAST MILES SPEEDX (2070)",
+                   "MAERSK": "LAST MILES MAERSK (2070)", "SPEEDX": "LAST MILES SPEEDX (2070)","GOFO": "LAST MILES GOFO (2070)",
                    "IN_BACKUP": "CARGO IN TIME 2020", "OUT_BACKUP": "SORTING TIME (2060)"}
         idx_map = {k: headers.index(v) + 1 for k, v in mapping.items() if v in headers}
         for r in range(2, ws_ags.max_row + 1):
@@ -1141,14 +1150,14 @@ def node_update(output_text):
         awb, mfcode = str(ws.cell(row=r, column=1).value or "").strip(), str(
             ws.cell(row=r, column=2).value or "").strip()
         if not awb or not mfcode: continue
-        for c in range(2, 20): ws.cell(row=r, column=c).fill = NO_FILL
-        ws.cell(row=r, column=19).value = ""
+        for c in range(2, 22): ws.cell(row=r, column=c).fill = NO_FILL
+        ws.cell(row=r, column=21).value = ""
 
-        t_in, t_out = parse_to_dt(ws.cell(row=r, column=11).value), parse_to_dt(ws.cell(row=r, column=12).value)
+        t_in, t_out = parse_to_dt(ws.cell(row=r, column=12).value), parse_to_dt(ws.cell(row=r, column=13).value)
         is_inverted = False
         if t_in and t_out and t_out < t_in: is_inverted = True
         if t_out:
-            for c_col in [13, 14, 15, 16, 17]:
+            for c_col in range(14, 20):
                 t_chan = parse_to_dt(ws.cell(row=r, column=c_col).value)
                 if t_chan and t_chan < t_out: is_inverted = True; break
 
@@ -1156,22 +1165,28 @@ def node_update(output_text):
             msg = f"{awb}: 出现倒挂情况无法上传"
             blocked_list.append(msg)
             summary_report += f"❌ {msg}\n"
-            ws.cell(row=r, column=19).value = "时间倒挂"
-            ws.cell(row=r, column=19).fill = RED_FILL
+            ws.cell(row=r, column=21).value = "时间倒挂"
+            ws.cell(row=r, column=21).fill = RED_FILL
             continue
 
         row_tasks = {"row": r, "awb": awb, "mfcode": mfcode, "tasks": []}
-        check_points = [("INBOUND", 4, 11, 1), ("OUTBOUND", 5, 12, 2), ("UNI", 6, 13, 3), ("COE", 7, 14, 4),
-                        ("USPS", 8, 15, 5), ("MAERSK", 9, 16, 6), ("SPEEDX", 10, 17, 7)]
+        check_points = [
+            ("INBOUND", 4, 12, 1),
+            ("OUTBOUND", 5, 13, 2),
+            ("UNI", 6, 14, 3),
+            ("COE", 7, 15, 4),
+            ("USPS", 8, 16, 5),
+            ("MAERSK", 9, 17, 6),
+            ("SPEEDX", 10, 18, 7),
+            ("GOFO", 11, 19, 8)  # 新增 GOFO
+        ]
 
-        has_in_time = parse_to_dt(ws.cell(row=r, column=11).value)
-        has_out_time = parse_to_dt(ws.cell(row=r, column=12).value)
-
+        has_in_time = parse_to_dt(ws.cell(row=r, column=12).value)
+        has_out_time = parse_to_dt(ws.cell(row=r, column=13).value)
         in_ok = (str(ws.cell(row=r, column=4).value).strip().upper() in ["Y", "YES"] or
-                 str(ws.cell(row=r, column=11).value) == "#N/A" or has_in_time)
-
+                 str(ws.cell(row=r, column=12).value) == "#N/A" or has_in_time)
         out_ok = (str(ws.cell(row=r, column=5).value).strip().upper() in ["Y", "YES"] or
-                  str(ws.cell(row=r, column=12).value) == "#N/A" or has_out_time)
+                  str(ws.cell(row=r, column=13).value) == "#N/A" or has_out_time)
 
         for name, s_col, t_col, p_type in check_points:
             status = str(ws.cell(row=r, column=s_col).value).strip().upper()
@@ -1204,7 +1219,7 @@ def node_update(output_text):
                     continue  # 拦截，不进任务队列
 
                 # --- 正常的超时检查 ---
-                if diff_h > 23:
+                if diff_h > 24:
                     msg = f"{awb}, {name}, {time_str}, 超出限制({diff_h:.1f}h)"
                     blocked_list.append(msg)
                     summary_report += f"🚫 {msg}\n"
@@ -1242,7 +1257,7 @@ def node_update(output_text):
         update_output_text(output_text, "\n🛑 用户取消操作，程序终止。\n")
         return
     # ==================== 4. 阶梯上传 (完全保留原始逻辑流) ====================
-    for stage, p_types in [("入库", [1]), ("出库", [2]), ("渠道", [3, 4, 5, 6, 7])]:
+    for stage, p_types in [("入库", [1]), ("出库", [2]), ("渠道", [3, 4, 5, 6, 7, 8])]:
         count = 0
         update_output_text(output_text, f"\n>>> 正在处理 [{stage}] 节点...\n")
         for item in rows_to_process:
@@ -1252,7 +1267,7 @@ def node_update(output_text):
                 if t["type"] in p_types:
                     func = {1: generate_payload_type1, 2: generate_payload_type2, 3: generate_payload_type3,
                             4: generate_payload_type4, 5: generate_payload_type5, 6: generate_payload_type6,
-                            7: generate_payload_type7}[t["type"]]
+                            7: generate_payload_type7, 8: generate_payload_type8}[t["type"]]
                     update_output_text(output_text, f"  [正在上传]: {item['awb']} - {t['name']}...")
                     if do_upload(func(item["mfcode"], t["time"]), cookies, token):
                         ws.cell(row=item["row"], column=t["col_s"]).value = "Y" if t["type"] <= 2 else "Yes"
@@ -1268,11 +1283,11 @@ def node_update(output_text):
             else:
                 update_output_text(output_text, f"[{stage}] 渠道追踪已全部完成。\n")
 
-    update_output_text(output_text, "\n>>> 正在计算派送时间 (R列)...\n")
+    update_output_text(output_text, "\n>>> 正在计算派送时间 (第20列)...\n")
     for r in range(2, ws.max_row + 1):
-        c_times = [parse_to_dt(ws.cell(row=r, column=c).value) for c in [13, 14, 15, 16, 17] if
+        c_times = [parse_to_dt(ws.cell(row=r, column=c).value) for c in range(14, 20) if
                    parse_to_dt(ws.cell(row=r, column=c).value)]
-        if c_times: ws.cell(row=r, column=18).value = max(c_times).strftime('%Y-%m-%d %H:%M:%S')
+        if c_times: ws.cell(row=r, column=20).value = max(c_times).strftime('%Y-%m-%d %H:%M:%S')
 
     wb.save(file_path_bbc)
     update_output_text(output_text, "更新完毕。\n")
@@ -1379,7 +1394,8 @@ def node_status(output_text, mode='1'):
         cookies, token = read_cookies()
         res = {
             "mfcode": "N/A", "in_t": None, "out_t": None, "han_t": None, "in_s": "N", "out_s": "N",
-            "uni_up": "No", "coe_up": "No", "usps_up": "No", "maersk_up": "No", "speedx_up": "No"
+            "uni_up": "No", "coe_up": "No", "usps_up": "No", "maersk_up": "No", "speedx_up": "No",
+            "gofo_up": "No" # 新增
         }
         if not token:
             update_output_text(output_text, f"[{awb}] 错误: 未获取到 X-Xsrf-Token\n")
@@ -1440,6 +1456,7 @@ def node_status(output_text, mode='1'):
             if '美国USPS直连末端配送' in content: res["usps_up"] = "Yes"
             if 'MAERSK-末端配送' in content: res["maersk_up"] = "Yes"
             if 'SpeedX配送' in content: res["speedx_up"] = "Yes"
+            if 'GOFO配送' in content: res["gofo_up"] = "Yes" # 确认 API 返回的 GOFO 关键字
 
         time.sleep(0.3)
         r3_data = post_with_retry("https://os.gcsp.cainiao-inc.com/gcsp-buc/ggg3oc/log/timeline",
@@ -1474,7 +1491,8 @@ def node_status(output_text, mode='1'):
             "USPS": "LASTMILESUSPS(2070)",
             "MAERSK": "LASTMILESMAERSK(2070)",
             "SPEEDX": "LASTMILESSPEEDX(2070)",
-            "IN_BACKUP": "CARGOINTIME2020",  # 对应你同事表格清洗后的样子
+            "GOFO": "LASTMILESGOFO(2070)",  # 新增
+            "IN_BACKUP": "CARGOINTIME2020",
             "OUT_BACKUP": "SORTINGTIME(2060)"
         }
         # 3. 使用 in 来进行模糊匹配，更稳健
@@ -1497,8 +1515,9 @@ def node_status(output_text, mode='1'):
 
     update_output_text(output_text, f"正在根据模式 {mode} 清理历史数据与格式...\n")
     for r in range(2, ws.max_row + 1):
-        start_col = 2 if mode == '1' else 13
-        for c in range(start_col, ws.max_column + 1):
+        # 如果 mode 不是 1，通常只清理时间列。现在时间列从 12 开始。
+        start_col = 2 if mode == '1' else 12
+        for c in range(start_col, 22):  # 明确范围到 21
             cell = ws.cell(row=r, column=c)
             cell.value = None
             cell.fill = NO_FILL
@@ -1509,16 +1528,17 @@ def node_status(output_text, mode='1'):
         awb = str(ws.cell(row=row, column=1).value or "").strip()
         if not awb: continue
 
-        for col_reset in range(2, 19):
+        for col_reset in range(2, 22):  # 清理到 21 列
             ws.cell(row=row, column=col_reset).fill = NO_FILL
-        ws.cell(row=row, column=18).value = ""
+        ws.cell(row=row, column=20).value = ""  # 清理派送时间
+        ws.cell(row=row, column=21).value = ""  # 清理备注
 
         update_output_text(output_text, f"正在处理: {awb}\n")
 
         cur_in_s = str(ws.cell(row=row, column=4).value).strip().upper()
         cur_out_s = str(ws.cell(row=row, column=5).value).strip().upper()
-        cur_in_t = str(ws.cell(row=row, column=10).value).strip().upper()
-        cur_out_t = str(ws.cell(row=row, column=11).value).strip().upper()
+        cur_in_t = str(ws.cell(row=row, column=12).value).strip().upper()  # 12 是 IN Time
+        cur_out_t = str(ws.cell(row=row, column=13).value).strip().upper()  # 13 是 OUT Time
 
         api_in_t = None
         api_out_t = None
@@ -1534,6 +1554,8 @@ def node_status(output_text, mode='1'):
             ws.cell(row=row, column=8).value = api["usps_up"]
             ws.cell(row=row, column=9).value = api["maersk_up"]
             ws.cell(row=row, column=10).value = api["speedx_up"]
+            ws.cell(row=row, column=11).value = api["gofo_up"]  # 新增第 11 列
+
             api_in_t = api["in_t"]
             api_out_t = api["out_t"]
 
@@ -1542,20 +1564,20 @@ def node_status(output_text, mode='1'):
         if not (cur_in_s == 'Y' or cur_in_t in ['#N/A']):
             val_in = api_in_t if (mode == '1' and api_in_t) else ags.get("IN_BACKUP")
             if val_in:
-                ws.cell(row=row, column=11).value = val_in
-            elif not ws.cell(row=row, column=11).value:
-                ws.cell(row=row, column=11).value = "N"
+                ws.cell(row=row, column=12).value = val_in  # 12 是 IN Time
+            elif not ws.cell(row=row, column=12).value:
+                ws.cell(row=row, column=12).value = "N"
 
         if not (cur_out_s == 'Y' or cur_out_t in ['#N/A']):
             val_out = api_out_t if (mode == '1' and api_out_t) else ags.get("OUT_BACKUP")
             if val_out:
-                ws.cell(row=row, column=12).value = val_out
-            elif not ws.cell(row=row, column=12).value:
-                ws.cell(row=row, column=12).value = "N"
+                ws.cell(row=row, column=13).value = val_out  # 13 是 OUT Time
+            elif not ws.cell(row=row, column=13).value:
+                ws.cell(row=row, column=13).value = "N"
 
         chan_tasks = [
-            (13, "UNI"), (14, "COE"), (15, "USPS"),
-            (16, "MAERSK"), (17, "SPEEDX")
+            (14, "UNI"), (15, "COE"), (16, "USPS"),
+            (17, "MAERSK"), (18, "SPEEDX"), (19, "GOFO")  # GOFO 在 19 列
         ]
 
         for t_col, ags_key in chan_tasks:
@@ -1563,8 +1585,8 @@ def node_status(output_text, mode='1'):
             if ags_time and ags_time not in ["N", "N/A", ""]:
                 ws.cell(row=row, column=t_col).value = ags_time
 
-        status_cols = [4, 5, 6, 7, 8, 9, 10]
-        time_cols = [11, 12, 13, 14, 15, 16, 17]
+        status_cols = [4, 5, 6, 7, 8, 9, 10, 11]  # 增加 11
+        time_cols = [12, 13, 14, 15, 16, 17, 18, 19]  # 整体偏移
         for s_col, t_col in zip(status_cols, time_cols):
             s_val = str(ws.cell(row=row, column=s_col).value).strip().upper()
             t_cell = ws.cell(row=row, column=t_col)
@@ -1578,39 +1600,39 @@ def node_status(output_text, mode='1'):
 
         in_status = str(ws.cell(row=row, column=4).value).strip().upper()
         out_status = str(ws.cell(row=row, column=5).value).strip().upper()
-        for col in range(11, 18):
+        for col in range(12, 20):
             cell = ws.cell(row=row, column=col)
             if cell.fill == GREEN_FILL: continue
-            if col == 11 and in_status == 'Y': continue
-            if col == 12 and out_status == 'Y': continue
+            if col == 12 and in_status == 'Y': continue  # 入库时间
+            if col == 13 and out_status == 'Y': continue  # 出库时间
             dt = parse_to_dt(cell.value)
-            if dt and dt < lax_now - timedelta(hours=23):
+            if dt and dt < lax_now - timedelta(hours=24):
                 cell.fill = RED_FILL
 
-        t_in = parse_to_dt(ws.cell(row=row, column=11).value)
-        t_out = parse_to_dt(ws.cell(row=row, column=12).value)
+        t_in = parse_to_dt(ws.cell(row=row, column=12).value)  # 12
+        t_out = parse_to_dt(ws.cell(row=row, column=13).value)  # 13
         inverted = False
         if t_in and t_out and t_out < t_in:
             inverted = True
         if t_out:
-            for col in range(13, 18):
+            for col in range(14, 20):
                 t_c = parse_to_dt(ws.cell(row=row, column=col).value)
                 if t_c and t_c < t_out:
                     inverted = True
                     break
         if inverted:
-            ws.cell(row=row, column=19).value = "时间倒挂"
-            ws.cell(row=row, column=19).fill = RED_FILL
+            ws.cell(row=row, column=21).value = "时间倒挂"  # 备注移到 21
+            ws.cell(row=row, column=21).fill = RED_FILL
 
-    update_output_text(output_text, "\n>>> 正在计算派送时间 (R列)...\n")
+    update_output_text(output_text, "\n>>> 正在计算派送时间 (第20列)...\n")
     for r in range(2, ws.max_row + 1):
         channel_times = []
-        for col in [13, 14, 15, 16, 17]:
+        for col in [14, 15, 16, 17, 18, 19]:  # 涵盖所有渠道：14(UNI) 到 19(GOFO)
             t_val = parse_to_dt(ws.cell(row=r, column=col).value)
             if t_val:
                 channel_times.append(t_val)
         if channel_times:
-            ws.cell(row=r, column=18).value = max(channel_times).strftime('%Y-%m-%d %H:%M:%S')
+            ws.cell(row=r, column=20).value = max(channel_times).strftime('%Y-%m-%d %H:%M:%S')  # 写入 20 列
 
     wb.save(file_path_bbc)
     update_output_text(output_text, "更新完成！\n")
