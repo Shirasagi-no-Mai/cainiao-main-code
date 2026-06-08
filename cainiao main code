@@ -1026,6 +1026,16 @@ def node_update(output_text):
         return {"testMode": "false", "domain": "USA", "gateCode": "All",
                 "handler": "selfServiceUsaManifestUpdateHandler",
                 "param": json.dumps(param_dict, ensure_ascii=False, separators=(',', ':')), "type": "NONE"}
+    def generate_payload_4px_extra(b_value, n_value):
+        param_dict = {"operateTime": n_value.strftime('%Y-%m-%d %H:%M:%S'), "operateTimeZone": "America/Los_Angeles",
+                      "status": "PARTIAL_HANDOVER", "partialIdType": "LAST_MILE_ID",
+                      "lastmileResourceList": ["DISTRIBUTOR_A8800412002"],
+                      "mainOrderCode": b_value, "bigBagIdList": [],
+                      "testMode": "false", "domain": "USA", "lang": "zh-CN",
+                      "lastmileResourceNameList": ["美国4PX末端配送"]}
+        return {"testMode": "false", "domain": "USA", "gateCode": "All",
+                "handler": "selfServiceUsaManifestUpdateHandler",
+                "param": json.dumps(param_dict, ensure_ascii=False, separators=(',', ':')), "type": "NONE"}
     # ==================== 2. 辅助工具 (完全保留原始逻辑) ====================
     def convert_to_standard_time(val):
         if val is None: return None
@@ -1270,6 +1280,9 @@ def node_update(output_text):
                             7: generate_payload_type7, 8: generate_payload_type8}[t["type"]]
                     update_output_text(output_text, f"  [正在上传]: {item['awb']} - {t['name']}...")
                     if do_upload(func(item["mfcode"], t["time"]), cookies, token):
+                        if t["type"] == 5:
+                            update_output_text(output_text, " [USPS成功, 触发4PX额外上传]...")
+                            do_upload(generate_payload_4px_extra(item["mfcode"], t["time"]), cookies, token, track_progress=False)
                         ws.cell(row=item["row"], column=t["col_s"]).value = "Y" if t["type"] <= 2 else "Yes"
                         count += 1;
                         update_output_text(output_text, " [OK]\n")
